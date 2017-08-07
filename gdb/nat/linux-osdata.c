@@ -1,6 +1,6 @@
 /* Linux-specific functions to retrieve OS data.
    
-   Copyright (C) 2009-2016 Free Software Foundation, Inc.
+   Copyright (C) 2009-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -1627,9 +1627,9 @@ linux_xfer_osdata_modules (gdb_byte *readbuf,
 }
 
 struct osdata_type {
-  char *type;
-  char *title;
-  char *description;
+  const char *type;
+  const char *title;
+  const char *description;
   LONGEST (*getter) (gdb_byte *readbuf, ULONGEST offset, ULONGEST len);
 } osdata_table[] = {
   { "cpus", "CPUs", "Listing of all cpus/cores on the system",

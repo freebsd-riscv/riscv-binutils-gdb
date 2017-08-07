@@ -1,6 +1,6 @@
 /* Routines for name->symbol lookups in GDB.
    
-   Copyright (C) 2003-2016 Free Software Foundation, Inc.
+   Copyright (C) 2003-2017 Free Software Foundation, Inc.
 
    Contributed by David Carlton <carlton@bactrian.org> and by Kealia,
    Inc.
@@ -527,20 +527,6 @@ dict_iterator_next (struct dict_iterator *iterator)
 {
   return (DICT_VECTOR (DICT_ITERATOR_DICT (iterator)))
     ->iterator_next (iterator);
-}
-
-struct symbol *
-dict_iter_name_first (const struct dictionary *dict,
-		      const char *name,
-		      struct dict_iterator *iterator)
-{
-  return dict_iter_match_first (dict, name, strcmp_iw, iterator);
-}
-
-struct symbol *
-dict_iter_name_next (const char *name, struct dict_iterator *iterator)
-{
-  return dict_iter_match_next (name, strcmp_iw, iterator);
 }
 
 struct symbol *

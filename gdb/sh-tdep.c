@@ -1,6 +1,6 @@
 /* Target-dependent code for Renesas Super-H, for GDB.
 
-   Copyright (C) 1993-2016 Free Software Foundation, Inc.
+   Copyright (C) 1993-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -111,7 +111,7 @@ sh_is_renesas_calling_convention (struct type *func_type)
 static const char *
 sh_sh_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
     "pc", "pr", "gbr", "vbr", "mach", "macl", "sr",
@@ -133,7 +133,7 @@ sh_sh_register_name (struct gdbarch *gdbarch, int reg_nr)
 static const char *
 sh_sh3_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
     "pc", "pr", "gbr", "vbr", "mach", "macl", "sr",
@@ -155,7 +155,7 @@ sh_sh3_register_name (struct gdbarch *gdbarch, int reg_nr)
 static const char *
 sh_sh3e_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
     "pc", "pr", "gbr", "vbr", "mach", "macl", "sr",
@@ -177,7 +177,7 @@ sh_sh3e_register_name (struct gdbarch *gdbarch, int reg_nr)
 static const char *
 sh_sh2e_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
     "pc", "pr", "gbr", "vbr", "mach", "macl", "sr",
@@ -199,7 +199,7 @@ sh_sh2e_register_name (struct gdbarch *gdbarch, int reg_nr)
 static const char *
 sh_sh2a_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     /* general registers 0-15 */
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
@@ -239,7 +239,7 @@ sh_sh2a_register_name (struct gdbarch *gdbarch, int reg_nr)
 static const char *
 sh_sh2a_nofpu_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     /* general registers 0-15 */
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
@@ -279,7 +279,7 @@ sh_sh2a_nofpu_register_name (struct gdbarch *gdbarch, int reg_nr)
 static const char *
 sh_sh_dsp_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
     "pc", "pr", "gbr", "vbr", "mach", "macl", "sr",
@@ -301,7 +301,7 @@ sh_sh_dsp_register_name (struct gdbarch *gdbarch, int reg_nr)
 static const char *
 sh_sh3_dsp_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
     "pc", "pr", "gbr", "vbr", "mach", "macl", "sr",
@@ -324,7 +324,7 @@ sh_sh3_dsp_register_name (struct gdbarch *gdbarch, int reg_nr)
 static const char *
 sh_sh4_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     /* general registers 0-15 */
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
@@ -362,7 +362,7 @@ sh_sh4_register_name (struct gdbarch *gdbarch, int reg_nr)
 static const char *
 sh_sh4_nofpu_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     /* general registers 0-15 */
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
@@ -398,7 +398,7 @@ sh_sh4_nofpu_register_name (struct gdbarch *gdbarch, int reg_nr)
 static const char *
 sh_sh4al_dsp_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static char *register_names[] = {
+  static const char *register_names[] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
     "pc", "pr", "gbr", "vbr", "mach", "macl", "sr",
@@ -418,11 +418,20 @@ sh_sh4al_dsp_register_name (struct gdbarch *gdbarch, int reg_nr)
   return register_names[reg_nr];
 }
 
-static const unsigned char *
-sh_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
+/* Implement the breakpoint_kind_from_pc gdbarch method.  */
+
+static int
+sh_breakpoint_kind_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr)
 {
-  /* 0xc3c3 is trapa #c3, and it works in big and little endian modes.  */
-  static unsigned char breakpoint[] = { 0xc3, 0xc3 };
+  return 2;
+}
+
+/* Implement the sw_breakpoint_from_kind gdbarch method.  */
+
+static const gdb_byte *
+sh_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
+{
+  *size = kind;
 
   /* For remote stub targets, trapa #20 is used.  */
   if (strcmp (target_shortname, "remote") == 0)
@@ -431,19 +440,18 @@ sh_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
       static unsigned char little_remote_breakpoint[] = { 0x20, 0xc3 };
 
       if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
-	{
-	  *lenptr = sizeof (big_remote_breakpoint);
-	  return big_remote_breakpoint;
-	}
+	return big_remote_breakpoint;
       else
-	{
-	  *lenptr = sizeof (little_remote_breakpoint);
-	  return little_remote_breakpoint;
-	}
+	return little_remote_breakpoint;
     }
+  else
+    {
+      /* 0xc3c3 is trapa #c3, and it works in big and little endian
+	 modes.  */
+      static unsigned char breakpoint[] = { 0xc3, 0xc3 };
 
-  *lenptr = sizeof (breakpoint);
-  return breakpoint;
+      return breakpoint;
+    }
 }
 
 /* Prologue looks like
@@ -1640,13 +1648,14 @@ sh_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 			 int reg_nr, gdb_byte *buffer)
 {
   int base_regnum;
-  gdb_byte temp_buffer[MAX_REGISTER_SIZE];
   enum register_status status;
 
   if (reg_nr == PSEUDO_BANK_REGNUM)
     return regcache_raw_read (regcache, BANK_REGNUM, buffer);
   else if (reg_nr >= DR0_REGNUM && reg_nr <= DR_LAST_REGNUM)
     {
+      /* Enough space for two float registers.  */
+      gdb_byte temp_buffer[4 * 2];
       base_regnum = dr_reg_base_num (gdbarch, reg_nr);
 
       /* Build the value in the provided buffer.  */
@@ -1679,7 +1688,6 @@ sh_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 			  int reg_nr, const gdb_byte *buffer)
 {
   int base_regnum, portion;
-  gdb_byte temp_buffer[MAX_REGISTER_SIZE];
 
   if (reg_nr == PSEUDO_BANK_REGNUM)
     {
@@ -1695,6 +1703,8 @@ sh_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
     }
   else if (reg_nr >= DR0_REGNUM && reg_nr <= DR_LAST_REGNUM)
     {
+      /* Enough space for two float registers.  */
+      gdb_byte temp_buffer[4 * 2];
       base_regnum = dr_reg_base_num (gdbarch, reg_nr);
 
       /* We must pay attention to the endiannes.  */
@@ -2260,6 +2270,10 @@ sh_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_int_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_long_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_long_long_bit (gdbarch, 8 * TARGET_CHAR_BIT);
+
+  set_gdbarch_wchar_bit (gdbarch, 2 * TARGET_CHAR_BIT);
+  set_gdbarch_wchar_signed (gdbarch, 0);
+
   set_gdbarch_float_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_double_bit (gdbarch, 8 * TARGET_CHAR_BIT);
   set_gdbarch_long_double_bit (gdbarch, 8 * TARGET_CHAR_BIT);
@@ -2274,9 +2288,9 @@ sh_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_register_type (gdbarch, sh_default_register_type);
   set_gdbarch_register_reggroup_p (gdbarch, sh_register_reggroup_p);
 
-  set_gdbarch_breakpoint_from_pc (gdbarch, sh_breakpoint_from_pc);
+  set_gdbarch_breakpoint_kind_from_pc (gdbarch, sh_breakpoint_kind_from_pc);
+  set_gdbarch_sw_breakpoint_from_kind (gdbarch, sh_sw_breakpoint_from_kind);
 
-  set_gdbarch_print_insn (gdbarch, print_insn_sh);
   set_gdbarch_register_sim_regno (gdbarch, legacy_register_sim_regno);
 
   set_gdbarch_return_value (gdbarch, sh_return_value_nofpu);

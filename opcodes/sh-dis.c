@@ -1,5 +1,5 @@
 /* Disassemble SH instructions.
-   Copyright (C) 1993-2016 Free Software Foundation, Inc.
+   Copyright (C) 1993-2017 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -25,7 +25,7 @@
 #define DEFINE_TABLE
 
 #include "sh-opc.h"
-#include "dis-asm.h"
+#include "disassemble.h"
 
 #ifdef ARCH_all
 #define INCLUDE_SHMEDIA

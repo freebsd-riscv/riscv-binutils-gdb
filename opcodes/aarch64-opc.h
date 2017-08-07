@@ -1,5 +1,5 @@
 /* aarch64-opc.h -- Header file for aarch64-opc.c and aarch64-opc-2.c.
-   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+   Copyright (C) 2012-2017 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of the GNU opcodes library.
@@ -80,6 +80,7 @@ enum aarch64_field_kind
   FLD_immr,
   FLD_immb,
   FLD_immh,
+  FLD_S_imm10,
   FLD_N,
   FLD_index,
   FLD_index2,
@@ -116,6 +117,7 @@ enum aarch64_field_kind
   FLD_SVE_Zn,
   FLD_SVE_Zt,
   FLD_SVE_i1,
+  FLD_SVE_i3h,
   FLD_SVE_imm3,
   FLD_SVE_imm4,
   FLD_SVE_imm5,
@@ -129,6 +131,8 @@ enum aarch64_field_kind
   FLD_SVE_msz,
   FLD_SVE_pattern,
   FLD_SVE_prfop,
+  FLD_SVE_rot1,
+  FLD_SVE_rot2,
   FLD_SVE_sz,
   FLD_SVE_tsz,
   FLD_SVE_tszh,
@@ -136,6 +140,9 @@ enum aarch64_field_kind
   FLD_SVE_tszl_19,
   FLD_SVE_xs_14,
   FLD_SVE_xs_22,
+  FLD_rotate1,
+  FLD_rotate2,
+  FLD_rotate3,
 };
 
 /* Field description.  */
@@ -182,9 +189,9 @@ extern const aarch64_operand aarch64_operands[];
 						   value by 2 to get the value
 						   of an immediate operand.  */
 #define OPD_F_MAYBE_SP		0x00000010	/* May potentially be SP.  */
-#define OPD_F_OD_MASK		0x00000060	/* Operand-dependent data.  */
+#define OPD_F_OD_MASK		0x000000e0	/* Operand-dependent data.  */
 #define OPD_F_OD_LSB		5
-#define OPD_F_NO_ZR		0x00000080	/* ZR index not allowed.  */
+#define OPD_F_NO_ZR		0x00000100	/* ZR index not allowed.  */
 
 static inline bfd_boolean
 operand_has_inserter (const aarch64_operand *operand)
@@ -221,6 +228,14 @@ static inline unsigned int
 get_operand_specific_data (const aarch64_operand *operand)
 {
   return (operand->flags & OPD_F_OD_MASK) >> OPD_F_OD_LSB;
+}
+
+/* Return the width of field number N of operand *OPERAND.  */
+static inline unsigned
+get_operand_field_width (const aarch64_operand *operand, unsigned n)
+{
+  assert (operand->fields[n] != FLD_NIL);
+  return fields[operand->fields[n]].width;
 }
 
 /* Return the total width of the operand *OPERAND.  */

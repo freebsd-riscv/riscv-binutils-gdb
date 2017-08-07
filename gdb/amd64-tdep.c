@@ -1,6 +1,6 @@
 /* Target-dependent code for AMD64.
 
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
 
    Contributed by Jiri Smid, SuSE Labs.
 
@@ -46,11 +46,12 @@
 #include "features/i386/amd64-avx.c"
 #include "features/i386/amd64-mpx.c"
 #include "features/i386/amd64-avx-mpx.c"
-#include "features/i386/amd64-avx512.c"
+#include "features/i386/amd64-avx-avx512.c"
+#include "features/i386/amd64-avx-mpx-avx512-pku.c"
 
 #include "features/i386/x32.c"
 #include "features/i386/x32-avx.c"
-#include "features/i386/x32-avx512.c"
+#include "features/i386/x32-avx-avx512.c"
 
 #include "ax.h"
 #include "ax-gdb.h"
@@ -154,6 +155,10 @@ static const char *amd64_xmm_avx512_names[] = {
     "xmm20",  "xmm21",  "xmm22",  "xmm23",
     "xmm24",  "xmm25",  "xmm26",  "xmm27",
     "xmm28",  "xmm29",  "xmm30",  "xmm31"
+};
+
+static const char *amd64_pkeys_names[] = {
+    "pkru"
 };
 
 /* DWARF Register Number Mapping as defined in the System V psABI,
@@ -353,7 +358,7 @@ amd64_pseudo_register_read_value (struct gdbarch *gdbarch,
 				  struct regcache *regcache,
 				  int regnum)
 {
-  gdb_byte raw_buf[MAX_REGISTER_SIZE];
+  gdb_byte *raw_buf = (gdb_byte *) alloca (register_size (gdbarch, regnum));
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   enum register_status status;
   struct value *result_value;
@@ -414,7 +419,7 @@ amd64_pseudo_register_write (struct gdbarch *gdbarch,
 			     struct regcache *regcache,
 			     int regnum, const gdb_byte *buf)
 {
-  gdb_byte raw_buf[MAX_REGISTER_SIZE];
+  gdb_byte *raw_buf = (gdb_byte *) alloca (register_size (gdbarch, regnum));
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   if (i386_byte_regnum_p (gdbarch, regnum))
@@ -674,7 +679,7 @@ amd64_classify (struct type *type, enum amd64_reg_class theclass[2])
   if ((code == TYPE_CODE_INT || code == TYPE_CODE_ENUM
        || code == TYPE_CODE_BOOL || code == TYPE_CODE_RANGE
        || code == TYPE_CODE_CHAR
-       || code == TYPE_CODE_PTR || code == TYPE_CODE_REF)
+       || code == TYPE_CODE_PTR || TYPE_IS_REFERENCE (type))
       && (len == 1 || len == 2 || len == 4 || len == 8))
     theclass[0] = AMD64_INTEGER;
 
@@ -998,6 +1003,13 @@ amd64_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   gdb_byte buf[8];
+
+  /* BND registers can be in arbitrary values at the moment of the
+     inferior call.  This can cause boundary violations that are not
+     due to a real bug or even desired by the user.  The best to be done
+     is set the BND registers to allow access to the whole memory, INIT
+     state, before pushing the inferior call.   */
+  i387_reset_bnd_regs (gdbarch, regcache);
 
   /* Pass arguments.  */
   sp = amd64_push_arguments (regcache, nargs, args, sp, struct_return);
@@ -2993,7 +3005,8 @@ static const int amd64_record_regmap[] =
 };
 
 void
-amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
+amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
+		const target_desc *default_tdesc)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   const struct target_desc *tdesc = info.target_desc;
@@ -3010,7 +3023,7 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->fpregset = &amd64_fpregset;
 
   if (! tdesc_has_registers (tdesc))
-    tdesc = tdesc_amd64;
+    tdesc = default_tdesc;
   tdep->tdesc = tdesc;
 
   tdep->num_core_regs = AMD64_NUM_GREGS + I387_NUM_REGS;
@@ -3045,6 +3058,26 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
       tdep->mpx_register_names = amd64_mpx_names;
       tdep->bndcfgu_regnum = AMD64_BNDCFGU_REGNUM;
       tdep->bnd0r_regnum = AMD64_BND0R_REGNUM;
+    }
+
+  if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.segments") != NULL)
+    {
+      const struct tdesc_feature *feature =
+	  tdesc_find_feature (tdesc, "org.gnu.gdb.i386.segments");
+      struct tdesc_arch_data *tdesc_data_segments =
+	  (struct tdesc_arch_data *) info.tdep_info;
+
+      tdesc_numbered_register (feature, tdesc_data_segments,
+		       AMD64_FSBASE_REGNUM, "fs_base");
+      tdesc_numbered_register (feature, tdesc_data_segments,
+		       AMD64_GSBASE_REGNUM, "gs_base");
+    }
+
+  if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.pkeys") != NULL)
+    {
+      tdep->pkeys_register_names = amd64_pkeys_names;
+      tdep->pkru_regnum = AMD64_PKRU_REGNUM;
+      tdep->num_pkeys_regs = 1;
     }
 
   tdep->num_byte_regs = 20;
@@ -3164,16 +3197,12 @@ amd64_x32_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
 }
 
 void
-amd64_x32_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
+amd64_x32_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
+		    const target_desc *default_tdesc)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  const struct target_desc *tdesc = info.target_desc;
 
-  amd64_init_abi (info, gdbarch);
-
-  if (! tdesc_has_registers (tdesc))
-    tdesc = tdesc_x32;
-  tdep->tdesc = tdesc;
+  amd64_init_abi (info, gdbarch, default_tdesc);
 
   tdep->num_dword_regs = 17;
   set_tdesc_pseudo_register_type (gdbarch, amd64_x32_pseudo_register_type);
@@ -3189,9 +3218,10 @@ amd64_target_description (uint64_t xcr0)
 {
   switch (xcr0 & X86_XSTATE_ALL_MASK)
     {
-    case X86_XSTATE_MPX_AVX512_MASK:
-    case X86_XSTATE_AVX512_MASK:
-      return tdesc_amd64_avx512;
+    case X86_XSTATE_AVX_MPX_AVX512_PKU_MASK:
+      return tdesc_amd64_avx_mpx_avx512_pku;
+    case X86_XSTATE_AVX_AVX512_MASK:
+      return tdesc_amd64_avx_avx512;
     case X86_XSTATE_MPX_MASK:
       return tdesc_amd64_mpx;
     case X86_XSTATE_AVX_MPX_MASK:
@@ -3213,11 +3243,12 @@ _initialize_amd64_tdep (void)
   initialize_tdesc_amd64_avx ();
   initialize_tdesc_amd64_mpx ();
   initialize_tdesc_amd64_avx_mpx ();
-  initialize_tdesc_amd64_avx512 ();
+  initialize_tdesc_amd64_avx_avx512 ();
+  initialize_tdesc_amd64_avx_mpx_avx512_pku ();
 
   initialize_tdesc_x32 ();
   initialize_tdesc_x32_avx ();
-  initialize_tdesc_x32_avx512 ();
+  initialize_tdesc_x32_avx_avx512 ();
 }
 
 

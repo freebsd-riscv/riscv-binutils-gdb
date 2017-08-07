@@ -1,5 +1,5 @@
 /* Mach-O support for BFD.
-   Copyright (C) 1999-2016 Free Software Foundation, Inc.
+   Copyright (C) 1999-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -746,7 +746,7 @@ typedef struct bfd_mach_o_backend_data
   enum bfd_architecture arch;
   bfd_vma page_size;
   bfd_boolean (*_bfd_mach_o_canonicalize_one_reloc)
-    (bfd *, struct mach_o_reloc_info_external *, arelent *, asymbol **);
+  (bfd *, struct mach_o_reloc_info_external *, arelent *, asymbol **, arelent *);
   bfd_boolean (*_bfd_mach_o_swap_reloc_out)(arelent *, bfd_mach_o_reloc_info *);
   bfd_boolean (*_bfd_mach_o_print_thread)(bfd *, bfd_mach_o_thread_flavour *,
                                           void *, char *);

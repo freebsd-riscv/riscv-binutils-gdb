@@ -1,6 +1,6 @@
 ## Process this file with automake to generate Makefile.in
 #
-#   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2017 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -177,6 +177,7 @@ TARGET_CPU_CFILES = \
 	config/tc-pdp11.c \
 	config/tc-pj.c \
 	config/tc-ppc.c \
+	config/tc-pru.c \
 	config/tc-riscv.c \
 	config/tc-rl78.c \
 	config/tc-rx.c \
@@ -195,6 +196,7 @@ TARGET_CPU_CFILES = \
 	config/tc-v850.c \
 	config/tc-vax.c \
 	config/tc-visium.c \
+	config/tc-wasm32.c \
 	config/tc-xstormy16.c \
 	config/tc-xc16x.c \
 	config/tc-xgate.c \
@@ -251,6 +253,7 @@ TARGET_CPU_HFILES = \
 	config/tc-pdp11.h \
 	config/tc-pj.h \
 	config/tc-ppc.h \
+	config/tc-pru.h \
 	config/tc-riscv.h \
 	config/tc-rl78.h \
 	config/tc-rx.h \
@@ -269,6 +272,7 @@ TARGET_CPU_HFILES = \
 	config/tc-v850.h \
 	config/tc-vax.h \
 	config/tc-visium.h \
+	config/tc-wasm32.h \
 	config/tc-xstormy16.h \
 	config/tc-xc16x.h \
 	config/tc-xgate.h \
@@ -667,21 +671,15 @@ stage3:
 
 against=stage2
 
-# This rule is derived from corresponding code in the Makefile.in for gcc.
-# The "tail +16c" is to bypass headers which may include timestamps or
-# temporary assembly file names.
 comparison:
 	x=0 ; \
 	for file in *.@OBJEXT@ ; do \
-	  tail +16c ./$$file > tmp-foo1; \
-	  if tail +16c ${against}/$$file > tmp-foo2 2>/dev/null ; then \
-	    if cmp tmp-foo1 tmp-foo2 ; then \
-	      true ; \
-	    else \
-	      echo $$file differs ; \
-	      x=1 ; \
-	    fi ; \
-	  else true; fi ; \
+	  f1=./$$file; f2=${against}/$$file; \
+	  $(do_compare) > /dev/null 2>&1; \
+	  if test $$? -ne 0; then \
+	    echo $$file differs ; \
+	    x=1 ; \
+	  fi ; \
 	done ; \
 	exit $$x
 	-rm -f tmp-foo*

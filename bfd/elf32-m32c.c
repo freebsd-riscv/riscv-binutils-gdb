@@ -1,5 +1,5 @@
 /* M16C/M32C specific support for 32-bit ELF.
-   Copyright (C) 2005-2016 Free Software Foundation, Inc.
+   Copyright (C) 2005-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -400,17 +400,13 @@ m32c_elf_relocate_section
   struct elf_link_hash_entry ** sym_hashes;
   Elf_Internal_Rela *           rel;
   Elf_Internal_Rela *           relend;
-  bfd *dynobj;
   asection *splt;
 
   symtab_hdr = & elf_tdata (input_bfd)->symtab_hdr;
   sym_hashes = elf_sym_hashes (input_bfd);
   relend     = relocs + input_section->reloc_count;
 
-  dynobj = elf_hash_table (info)->dynobj;
-  splt = NULL;
-  if (dynobj != NULL)
-    splt = bfd_get_linker_section (dynobj, ".plt");
+  splt = elf_hash_table (info)->splt;
 
   for (rel = relocs; rel < relend; rel ++)
     {
@@ -693,7 +689,7 @@ m32c_elf_check_relocs
 
 	  /* PR15323, ref flags aren't set for references in the same
 	     object.  */
-	  h->root.non_ir_ref = 1;
+	  h->root.non_ir_ref_regular = 1;
 	}
 
       switch (ELF32_R_TYPE (rel->r_info))
@@ -704,20 +700,18 @@ m32c_elf_check_relocs
 	case R_M32C_16:
 	  if (dynobj == NULL)
 	    elf_hash_table (info)->dynobj = dynobj = abfd;
+	  splt = elf_hash_table (info)->splt;
 	  if (splt == NULL)
 	    {
-	      splt = bfd_get_linker_section (dynobj, ".plt");
-	      if (splt == NULL)
-		{
-		  flagword flags = (SEC_ALLOC | SEC_LOAD | SEC_HAS_CONTENTS
-				    | SEC_IN_MEMORY | SEC_LINKER_CREATED
-				    | SEC_READONLY | SEC_CODE);
-		  splt = bfd_make_section_anyway_with_flags (dynobj, ".plt",
-							     flags);
-		  if (splt == NULL
-		      || ! bfd_set_section_alignment (dynobj, splt, 1))
-		    return FALSE;
-		}
+	      flagword flags = (SEC_ALLOC | SEC_LOAD | SEC_HAS_CONTENTS
+				| SEC_IN_MEMORY | SEC_LINKER_CREATED
+				| SEC_READONLY | SEC_CODE);
+	      splt = bfd_make_section_anyway_with_flags (dynobj, ".plt",
+							 flags);
+	      elf_hash_table (info)->splt = splt;
+	      if (splt == NULL
+		  || ! bfd_set_section_alignment (dynobj, splt, 1))
+		return FALSE;
 	    }
 
 	  if (h != NULL)
@@ -759,14 +753,13 @@ static bfd_boolean
 m32c_elf_finish_dynamic_sections (bfd *abfd ATTRIBUTE_UNUSED,
                                   struct bfd_link_info *info)
 {
-  bfd *dynobj;
-  asection *splt;
+  bfd *dynobj = elf_hash_table (info)->dynobj;
+  asection *splt = elf_hash_table (info)->splt;
 
   /* As an extra sanity check, verify that all plt entries have
      been filled in.  */
 
-  if ((dynobj = elf_hash_table (info)->dynobj) != NULL
-      && (splt = bfd_get_linker_section (dynobj, ".plt")) != NULL)
+  if (dynobj != NULL && splt != NULL)
     {
       bfd_byte *contents = splt->contents;
       unsigned int i, size = splt->size;
@@ -794,7 +787,7 @@ m32c_elf_always_size_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
   if (dynobj == NULL)
     return TRUE;
 
-  splt = bfd_get_linker_section (dynobj, ".plt");
+  splt = elf_hash_table (info)->splt;
   BFD_ASSERT (splt != NULL);
 
   splt->contents = (bfd_byte *) bfd_zalloc (dynobj, splt->size);
@@ -833,7 +826,7 @@ m32c_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 
 #ifdef DEBUG
   _bfd_error_handler
-    ("old_flags = 0x%.8lx, new_flags = 0x%.8lx, init = %s, filename = %s",
+    ("old_flags = 0x%.8x, new_flags = 0x%.8x, init = %s, filename = %s",
      old_flags, new_flags, elf_flags_init (obfd) ? "yes" : "no",
      bfd_get_filename (ibfd));
 #endif
@@ -881,8 +874,8 @@ m32c_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 	  error = TRUE;
 	  _bfd_error_handler
 	    /* xgettext:c-format */
-	    (_("%s: compiled with %s and linked with modules compiled with %s"),
-	     bfd_get_filename (ibfd), new_opt, old_opt);
+	    (_("%B: compiled with %s and linked with modules compiled with %s"),
+	     ibfd, new_opt, old_opt);
 	}
 
       new_flags &= ~ EF_M32C_ALL_FLAGS;
@@ -894,8 +887,9 @@ m32c_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 	  error = TRUE;
 	  _bfd_error_handler
 	    /* xgettext:c-format */
-	    (_("%s: uses different e_flags (0x%lx) fields than previous modules (0x%lx)"),
-	     bfd_get_filename (ibfd), (long)new_flags, (long)old_flags);
+	    (_("%B: uses different e_flags (%#x) fields"
+	       " than previous modules (%#x)"),
+	     ibfd, new_flags, old_flags);
 	}
     }
 
@@ -2113,7 +2107,8 @@ m32c_elf_relax_delete_bytes
 
 /* This is for versions of gcc prior to 4.3.  */
 static unsigned int
-_bfd_m32c_elf_eh_frame_address_size (bfd *abfd, asection *sec ATTRIBUTE_UNUSED)
+_bfd_m32c_elf_eh_frame_address_size (bfd *abfd,
+				     const asection *sec ATTRIBUTE_UNUSED)
 {
   if ((elf_elfheader (abfd)->e_flags & EF_M32C_CPU_MASK) == EF_M32C_CPU_M16C)
     return 2;

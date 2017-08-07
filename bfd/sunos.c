@@ -1,5 +1,5 @@
 /* BFD backend for SunOS binaries.
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -2314,7 +2314,7 @@ sunos_write_dynamic_symbol (bfd *output_bfd,
 }
 
 /* This is called for each reloc against an external symbol.  If this
-   is a reloc which are are going to copy as a dynamic reloc, then
+   is a reloc which are going to copy as a dynamic reloc, then
    copy it over, and tell the caller to not bother processing this
    reloc.  */
 

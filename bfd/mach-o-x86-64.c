@@ -1,5 +1,5 @@
 /* Intel x86-64 Mach-O support for BFD.
-   Copyright (C) 2010-2016 Free Software Foundation, Inc.
+   Copyright (C) 2010-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -120,9 +120,11 @@ static reloc_howto_type x86_64_howto_table[]=
 };
 
 static bfd_boolean
-bfd_mach_o_x86_64_canonicalize_one_reloc (bfd *abfd,
-				        struct mach_o_reloc_info_external *raw,
-					arelent *res, asymbol **syms)
+bfd_mach_o_x86_64_canonicalize_one_reloc (bfd *       abfd,
+					  struct mach_o_reloc_info_external * raw,
+					  arelent *   res,
+					  asymbol **  syms,
+					  arelent *   res_base ATTRIBUTE_UNUSED)
 {
   bfd_mach_o_reloc_info reloc;
 

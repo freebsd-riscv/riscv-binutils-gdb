@@ -1,5 +1,5 @@
 /* aarch64-asm.h -- Header file for aarch64-asm.c and aarch64-asm-2.c.
-   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+   Copyright (C) 2012-2017 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of the GNU opcodes library.
@@ -59,6 +59,7 @@ AARCH64_DECL_OPD_INSERTER (ins_ft);
 AARCH64_DECL_OPD_INSERTER (ins_addr_simple);
 AARCH64_DECL_OPD_INSERTER (ins_addr_regoff);
 AARCH64_DECL_OPD_INSERTER (ins_addr_simm);
+AARCH64_DECL_OPD_INSERTER (ins_addr_simm10);
 AARCH64_DECL_OPD_INSERTER (ins_addr_uimm12);
 AARCH64_DECL_OPD_INSERTER (ins_simd_addr_post);
 AARCH64_DECL_OPD_INSERTER (ins_cond);
@@ -70,6 +71,7 @@ AARCH64_DECL_OPD_INSERTER (ins_hint);
 AARCH64_DECL_OPD_INSERTER (ins_prfop);
 AARCH64_DECL_OPD_INSERTER (ins_reg_extended);
 AARCH64_DECL_OPD_INSERTER (ins_reg_shifted);
+AARCH64_DECL_OPD_INSERTER (ins_sve_addr_ri_s4);
 AARCH64_DECL_OPD_INSERTER (ins_sve_addr_ri_s4xvl);
 AARCH64_DECL_OPD_INSERTER (ins_sve_addr_ri_s6xvl);
 AARCH64_DECL_OPD_INSERTER (ins_sve_addr_ri_s9xvl);
@@ -87,10 +89,13 @@ AARCH64_DECL_OPD_INSERTER (ins_sve_float_half_two);
 AARCH64_DECL_OPD_INSERTER (ins_sve_float_zero_one);
 AARCH64_DECL_OPD_INSERTER (ins_sve_index);
 AARCH64_DECL_OPD_INSERTER (ins_sve_limm_mov);
+AARCH64_DECL_OPD_INSERTER (ins_sve_quad_index);
 AARCH64_DECL_OPD_INSERTER (ins_sve_reglist);
 AARCH64_DECL_OPD_INSERTER (ins_sve_scale);
 AARCH64_DECL_OPD_INSERTER (ins_sve_shlimm);
 AARCH64_DECL_OPD_INSERTER (ins_sve_shrimm);
+AARCH64_DECL_OPD_INSERTER (ins_imm_rotate1);
+AARCH64_DECL_OPD_INSERTER (ins_imm_rotate2);
 
 #undef AARCH64_DECL_OPD_INSERTER
 

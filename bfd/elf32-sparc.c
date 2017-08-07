@@ -1,5 +1,5 @@
 /* SPARC-specific support for 32-bit ELF
-   Copyright (C) 1993-2016 Free Software Foundation, Inc.
+   Copyright (C) 1993-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -142,6 +142,7 @@ elf32_sparc_final_write_processing (bfd *abfd,
     case bfd_mach_sparc_v8pluse :
     case bfd_mach_sparc_v8plusv :
     case bfd_mach_sparc_v8plusm :
+    case bfd_mach_sparc_v8plusm8 :
       elf_elfheader (abfd)->e_machine = EM_SPARC32PLUS;
       elf_elfheader (abfd)->e_flags &=~ EF_SPARC_32PLUS_MASK;
       elf_elfheader (abfd)->e_flags |= EF_SPARC_32PLUS | EF_SPARC_SUN_US1
@@ -238,6 +239,7 @@ elf32_sparc_add_symbol_hook (bfd * abfd,
 #define elf_backend_gc_sweep_hook       _bfd_sparc_elf_gc_sweep_hook
 #define elf_backend_plt_sym_val		_bfd_sparc_elf_plt_sym_val
 #define elf_backend_init_index_section	_bfd_elf_init_1_index_section
+#define elf_backend_fixup_symbol        _bfd_sparc_elf_fixup_symbol
 
 #define elf_backend_can_gc_sections 1
 #define elf_backend_can_refcount 1
@@ -245,6 +247,7 @@ elf32_sparc_add_symbol_hook (bfd * abfd,
 #define elf_backend_plt_readonly 0
 #define elf_backend_want_plt_sym 1
 #define elf_backend_got_header_size 4
+#define elf_backend_want_dynrelro 1
 #define elf_backend_rela_normal 1
 
 #define elf_backend_add_symbol_hook		elf32_sparc_add_symbol_hook
@@ -332,6 +335,8 @@ elf32_sparc_vxworks_final_write_processing (bfd *abfd, bfd_boolean linker)
 #define elf_backend_plt_readonly		1
 #undef  elf_backend_got_header_size
 #define elf_backend_got_header_size		12
+#undef  elf_backend_dtrel_excludes_plt
+#define elf_backend_dtrel_excludes_plt		1
 #undef  elf_backend_add_symbol_hook
 #define elf_backend_add_symbol_hook \
   elf_vxworks_add_symbol_hook

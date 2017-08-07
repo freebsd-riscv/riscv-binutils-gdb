@@ -1,5 +1,5 @@
 /* Generic ECOFF (Extended-COFF) routines.
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
    Original version by Per Bothner.
    Full support added by Ian Lance Taylor, ian@cygnus.com.
 
@@ -961,7 +961,7 @@ _bfd_ecoff_slurp_symbol_table (bfd *abfd)
       bfd_get_symcount (abfd) = internal_ptr - internal;
       _bfd_error_handler
 	/* xgettext:c-format */
-	(_("%B: warning: isymMax (%ld) is greater than ifdMax (%d)\n"),
+	(_("%B: warning: isymMax (%ld) is greater than ifdMax (%ld)"),
 	 abfd, ecoff_data (abfd)->debug_info.symbolic_header.isymMax,
 	 ecoff_data (abfd)->debug_info.symbolic_header.ifdMax);
     }

@@ -57,8 +57,17 @@
 #include "dwarf2-frame.h"
 #include "user-regs.h"
 #include "valprint.h"
+#include "common-defs.h"
 #include "opcode/riscv-opc.h"
 #include <algorithm>
+
+#define DECLARE_INSN(INSN_NAME, INSN_MATCH, INSN_MASK) \
+static inline bool is_ ## INSN_NAME ## _insn (long insn) \
+{ \
+  return (insn & INSN_MASK) == INSN_MATCH; \
+}
+#include "opcode/riscv-opc.h"
+#undef DECLARE_INSN
 
 struct riscv_frame_cache
 {
@@ -158,26 +167,109 @@ static const struct register_alias riscv_register_aliases[] =
 #undef DECLARE_CSR
 };
 
-static const gdb_byte *
-riscv_breakpoint_from_pc (struct gdbarch *gdbarch,
-			  CORE_ADDR      *bp_addr,
-			  int            *bp_size)
+static enum auto_boolean use_compressed_breakpoints;
+/*
+static void
+show_use_compressed_breakpoints (struct ui_file *file, int from_tty,
+			    struct cmd_list_element *c,
+			    const char *value)
 {
-  /* TODO: Support C.EBREAK for compressed (16-bit) insns.  */
-  /* TODO: Support NOPs for >=6 byte insns.  */
-  static const gdb_byte sbreak_insn[] = { 0x73, 0x00, 0x10, 0x00, };
+  fprintf_filtered (file,
+		    _("Debugger's behavior regarding "
+		      "compressed breakpoints is %s.\n"),
+		    value);
+}
+*/
 
-  *bp_size = 4;
+static struct cmd_list_element *setriscvcmdlist = NULL;
+static struct cmd_list_element *showriscvcmdlist = NULL;
 
-  return sbreak_insn;
+static void
+show_riscv_command (char *args, int from_tty)
+{
+  help_list (showriscvcmdlist, "show riscv ", all_commands, gdb_stdout);
 }
 
 static void
-riscv_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *kindptr)
+set_riscv_command (char *args, int from_tty)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  printf_unfiltered
+    ("\"set riscv\" must be followed by an appropriate subcommand.\n");
+  help_list (setriscvcmdlist, "set riscv ", all_commands, gdb_stdout);
+}
 
-  riscv_breakpoint_from_pc (gdbarch, pcptr, kindptr);
+static uint32_t
+cached_misa ()
+{
+  static bool read = false;
+  static uint32_t value = 0;
+
+  if (!read) {
+    struct frame_info *frame = get_current_frame ();
+    TRY
+      {
+        value = get_frame_register_unsigned (frame, RISCV_CSR_MISA_REGNUM);
+      }
+    CATCH (ex, RETURN_MASK_ERROR)
+      {
+        // In old cores, $misa might live at 0xf10
+        value = get_frame_register_unsigned (frame,
+            RISCV_CSR_MISA_REGNUM - 0x301 + 0xf10);
+      }
+    END_CATCH
+    read = true;
+  }
+
+  return value;
+}
+
+/* Implement the breakpoint_kind_from_pc gdbarch method.  */
+
+static int
+riscv_breakpoint_kind_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr)
+{
+  if (use_compressed_breakpoints == AUTO_BOOLEAN_AUTO) {
+    if (gdbarch_tdep (gdbarch)->supports_compressed_isa == AUTO_BOOLEAN_AUTO)
+    {
+      /* TODO: Because we try to read misa, it is not possible to set a
+         breakpoint before connecting to a live target. A suggested workaround is
+         to look at the ELF file in this case.  */
+      uint32_t misa = cached_misa();
+      if (misa & (1<<2))
+        gdbarch_tdep (gdbarch)->supports_compressed_isa = AUTO_BOOLEAN_TRUE;
+      else
+        gdbarch_tdep (gdbarch)->supports_compressed_isa = AUTO_BOOLEAN_FALSE;
+    }
+
+    if (gdbarch_tdep (gdbarch)->supports_compressed_isa == AUTO_BOOLEAN_TRUE)
+      return 2;
+    else
+      return 4;
+  } else if (use_compressed_breakpoints == AUTO_BOOLEAN_TRUE) {
+    return 2;
+  } else {
+    return 4;
+  }
+}
+
+/* Implement the sw_breakpoint_from_kind gdbarch method.  */
+
+static const gdb_byte *
+riscv_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
+{
+  static const gdb_byte ebreak[] = { 0x73, 0x00, 0x10, 0x00, };
+  static const gdb_byte c_ebreak[] = { 0x02, 0x90 };
+
+  *size = kind;
+  switch (kind)
+    {
+    case 2:
+      return c_ebreak;
+    case 4:
+      return ebreak;
+    default:
+      gdb_assert(0);
+    }
 }
 
 static struct value *
@@ -190,8 +282,8 @@ value_of_riscv_user_reg (struct frame_info *frame, const void *baton)
 
 static const char *
 register_name (struct gdbarch *gdbarch,
-	       int             regnum,
-               int             prefer_alias)
+	       int regnum,
+	       int prefer_alias)
 {
   int i;
   static char buf[20];
@@ -224,12 +316,16 @@ register_name (struct gdbarch *gdbarch,
   return NULL;
 }
 
+/* Implement the register_name gdbarch method.  */
+
 static const char *
 riscv_register_name (struct gdbarch *gdbarch,
-		     int             regnum)
+		     int regnum)
 {
   return register_name(gdbarch, regnum, 0);
 }
+
+/* Reads a function return value of type TYPE.  */
 
 static void
 riscv_extract_return_value (struct type *type,
@@ -242,6 +338,7 @@ riscv_extract_return_value (struct type *type,
   int regsize = riscv_isa_regsize (gdbarch);
   bfd_byte *valbuf = dst;
   int len = TYPE_LENGTH (type);
+  int st_len = std::min (regsize, len);
   ULONGEST tmp;
 
   gdb_assert (len <= 2 * regsize);
@@ -249,7 +346,7 @@ riscv_extract_return_value (struct type *type,
   while (len > 0)
     {
       regcache_cooked_read_unsigned (regs, regnum++, &tmp);
-      store_unsigned_integer (valbuf, std::min (regsize, len), byte_order, tmp);
+      store_unsigned_integer (valbuf, st_len, byte_order, tmp);
       len -= regsize;
       valbuf += regsize;
     }
@@ -284,13 +381,15 @@ riscv_store_return_value (struct type *type,
     }
 }
 
+/* Implement the return_value gdbarch method.  */
+
 static enum return_value_convention
 riscv_return_value (struct gdbarch  *gdbarch,
 		    struct value *function,
-		    struct type     *type,
+		    struct type *type,
 		    struct regcache *regcache,
-		    gdb_byte        *readbuf,
-		    const gdb_byte  *writebuf)
+		    gdb_byte *readbuf,
+		    const gdb_byte *writebuf)
 {
   enum type_code rv_type = TYPE_CODE (type);
   unsigned int rv_size = TYPE_LENGTH (type);
@@ -305,8 +404,8 @@ riscv_return_value (struct gdbarch  *gdbarch,
      struct consisting of only one or two floating-point values.  Other return
      values that fit into two pointer-words are returned in a0 and a1.  Larger
      return values are passed entirely in memory; the caller allocates this
-     memory region and passes a pointer to it as an implicit first parameter to
-     the callee.  */
+     memory region and passes a pointer to it as an implicit first parameter
+     to the callee.  */
 
   /* Deal with struct/unions first that are passed via memory.  */
   if (rv_size > 2 * riscv_isa_regsize (gdbarch))
@@ -357,41 +456,54 @@ riscv_return_value (struct gdbarch  *gdbarch,
   return RETURN_VALUE_REGISTER_CONVENTION;
 }
 
+/* Implement the pseudo_register_read gdbarch method.  */
+
 static enum register_status
-riscv_pseudo_register_read (struct gdbarch  *gdbarch,
+riscv_pseudo_register_read (struct gdbarch *gdbarch,
 			    struct regcache *regcache,
-			    int              regnum,
-			    gdb_byte        *buf)
+			    int regnum,
+			    gdb_byte *buf)
 {
   return regcache_raw_read (regcache, regnum, buf);
 }
 
+/* Implement the pseudo_register_write gdbarch method.  */
+
 static void
-riscv_pseudo_register_write (struct gdbarch  *gdbarch,
+riscv_pseudo_register_write (struct gdbarch *gdbarch,
 			     struct regcache *regcache,
-			     int              cookednum,
-			     const gdb_byte  *buf)
+			     int cookednum,
+			     const gdb_byte *buf)
 {
   regcache_raw_write (regcache, cookednum, buf);
 }
 
+/* Implement the register_type gdbarch method.  */
+
 static struct type *
-riscv_register_type (struct gdbarch  *gdbarch,
-		     int              regnum)
+riscv_register_type (struct gdbarch *gdbarch,
+		     int regnum)
 {
   int regsize = riscv_isa_regsize (gdbarch);
 
   if (regnum < RISCV_FIRST_FP_REGNUM)
     {
- int_regsizes:
+      /*
+       * GPRs and especially the PC are listed as unsigned so that gdb can
+       * interpret them as addresses without any problems. Specifically, if a
+       * user runs "x/i $pc" then they should see the instruction at the PC.
+       * But on a 32-bit system, with a signed PC of eg. 0x8000_0000, gdb will
+       * internally sign extend the value and then attempt to read from
+       * 0xffff_ffff_8000_0000, which it then concludes it can't read.
+       */
       switch (regsize)
 	{
 	case 4:
-	  return builtin_type (gdbarch)->builtin_int32;
+	  return builtin_type (gdbarch)->builtin_uint32;
 	case 8:
-	  return builtin_type (gdbarch)->builtin_int64;
+	  return builtin_type (gdbarch)->builtin_uint64;
 	case 16:
-	  return builtin_type (gdbarch)->builtin_int128;
+	  return builtin_type (gdbarch)->builtin_uint128;
 	default:
 	  internal_error (__FILE__, __LINE__,
 			  _("unknown isa regsize %i"), regsize);
@@ -422,54 +534,19 @@ riscv_register_type (struct gdbarch  *gdbarch,
 	  || regnum == RISCV_CSR_FCSR_REGNUM)
 	return builtin_type (gdbarch)->builtin_int32;
 
-      goto int_regsizes;
+      switch (regsize)
+	{
+	case 4:
+	  return builtin_type (gdbarch)->builtin_int32;
+	case 8:
+	  return builtin_type (gdbarch)->builtin_int64;
+	case 16:
+	  return builtin_type (gdbarch)->builtin_int128;
+	default:
+	  internal_error (__FILE__, __LINE__,
+			  _("unknown isa regsize %i"), regsize);
+	}
     }
-}
-
-/* TODO: Replace all this with tdesc XML files.  */
-static void
-riscv_read_fp_register_single (struct frame_info *frame, int regno,
-			       gdb_byte *rare_buffer)
-{
-  struct gdbarch *gdbarch = get_frame_arch (frame);
-  int raw_size = register_size (gdbarch, regno);
-  gdb_byte *raw_buffer = (gdb_byte *) alloca (raw_size);
-
-  if (!deprecated_frame_register_read (frame, regno, raw_buffer))
-    error (_("can't read register %d (%s)"), regno,
-	   gdbarch_register_name (gdbarch, regno));
-
-  if (raw_size == 8)
-    {
-      int offset;
-
-      if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
-	offset = 4;
-      else
-	offset = 0;
-
-      memcpy (rare_buffer, raw_buffer + offset, 4);
-    }
-  else
-    memcpy (rare_buffer, raw_buffer, 4);
-}
-
-static void
-riscv_read_fp_register_double (struct frame_info *frame, int regno,
-			       gdb_byte *rare_buffer)
-{
-  struct gdbarch *gdbarch = get_frame_arch (frame);
-  int raw_size = register_size (gdbarch, regno);
-
-  if (raw_size == 8)
-    {
-      if (!deprecated_frame_register_read (frame, regno, rare_buffer))
-	error (_("can't read register %d (%s)"), regno,
-	       gdbarch_register_name (gdbarch, regno));
-    }
-  else
-    internal_error (__FILE__, __LINE__,
-		    _("%s: size says 32-bits, read is 64-bits."), __func__);
 }
 
 static void
@@ -477,47 +554,17 @@ riscv_print_fp_register (struct ui_file *file, struct frame_info *frame,
 			 int regnum)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  gdb_byte *raw_buffer;
   struct value_print_options opts;
-  double val;
-  int inv;
   const char *regname;
-
-  raw_buffer = (gdb_byte *) alloca (2 * register_size (gdbarch, RISCV_FIRST_FP_REGNUM));
+  value *val = get_frame_register_value(frame, regnum);
 
   fprintf_filtered (file, "%-15s", gdbarch_register_name (gdbarch, regnum));
 
-  if (register_size (gdbarch, regnum) == 4)
-    {
-      riscv_read_fp_register_single (frame, regnum, raw_buffer);
-      val = unpack_double (builtin_type (gdbarch)->builtin_float, raw_buffer,
-			   &inv);
-
-      get_formatted_print_options (&opts, 'x');
-      print_scalar_formatted (raw_buffer,
-			      builtin_type (gdbarch)->builtin_float,
-			      &opts, 'w', file);
-
-      if (!inv)
-	fprintf_filtered (file, "\t%-17.9g", val);
-    }
-  else
-    {
-      riscv_read_fp_register_double (frame, regnum, raw_buffer);
-      val = unpack_double (builtin_type (gdbarch)->builtin_double, raw_buffer,
-			   &inv);
-
-      get_formatted_print_options (&opts, 'x');
-      print_scalar_formatted (raw_buffer,
-			      builtin_type (gdbarch)->builtin_double,
-			      &opts, 'g', file);
-
-      if (!inv)
-	fprintf_filtered (file, "\t%-24.17g", val);
-    }
-
-  if (inv)
-    fprintf_filtered (file, "\t<invalid>");
+  get_formatted_print_options (&opts, 'f');
+  val_print_scalar_formatted (value_type (val),
+			      value_embedded_offset (val),
+			      val,
+			      &opts, 0, file);
 }
 
 static void
@@ -675,9 +722,11 @@ riscv_print_register_formatted (struct ui_file *file, struct frame_info *frame,
   fprintf_filtered (file, "\n");
 }
 
+/* Implement the register_reggroup_p gdbarch method.  */
+
 static int
 riscv_register_reggroup_p (struct gdbarch  *gdbarch,
-			   int              regnum,
+			   int regnum,
 			   struct reggroup *reggroup)
 {
   int float_p;
@@ -706,9 +755,12 @@ riscv_register_reggroup_p (struct gdbarch  *gdbarch,
 	        || regnum == RISCV_CSR_FRM_REGNUM);
   else if (reggroup == general_reggroup)
     return regnum < RISCV_FIRST_FP_REGNUM;
-  else if (reggroup == restore_reggroup || reggroup == save_reggroup)
-    return regnum <= RISCV_LAST_FP_REGNUM;
-  else if (reggroup == system_reggroup) {
+  else if (reggroup == restore_reggroup || reggroup == save_reggroup) {
+    if (cached_misa() & ((1<<('F'-'A')) | (1<<('D'-'A')) | (1<<('Q'-'A'))))
+      return regnum <= RISCV_LAST_FP_REGNUM;
+    else
+      return regnum < RISCV_FIRST_FP_REGNUM;
+  } else if (reggroup == system_reggroup) {
     if (regnum == RISCV_PRIV_REGNUM)
       return 1;
     if (regnum < RISCV_FIRST_CSR_REGNUM || regnum > RISCV_LAST_CSR_REGNUM)
@@ -724,6 +776,8 @@ riscv_register_reggroup_p (struct gdbarch  *gdbarch,
   else
     internal_error (__FILE__, __LINE__, _("unhandled reggroup"));
 }
+
+/* Implement the print_registers_info gdbarch method.  */
 
 static void
 riscv_print_registers_info (struct gdbarch    *gdbarch,
@@ -762,7 +816,7 @@ riscv_print_registers_info (struct gdbarch    *gdbarch,
 static ULONGEST
 riscv_fetch_instruction (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  enum bfd_endian byte_order = gdbarch_byte_order_for_code (gdbarch);
   gdb_byte buf[8];
   int instlen, status;
 
@@ -804,7 +858,12 @@ reset_saved_regs (struct gdbarch *gdbarch, struct riscv_frame_cache *this_cache)
     return;
 
   for (i = 0; i < num_regs; ++i)
-    this_cache->saved_regs[i].addr = -1;
+    this_cache->saved_regs[i].addr = 0;
+}
+
+static int riscv_decode_register_index(unsigned long opcode, int offset)
+{
+    return (opcode >> offset) & 0x1F;
 }
 
 static CORE_ADDR
@@ -838,22 +897,24 @@ riscv_scan_prologue (struct gdbarch *gdbarch,
   /* TODO: Handle compressed extensions.  */
   for (cur_pc = start_pc; cur_pc < limit_pc; cur_pc += 4)
     {
-      unsigned long inst, opcode;
+      ULONGEST inst;
+      unsigned long opcode;
       int reg, rs1, imm12, rs2, offset12, funct3;
 
       /* Fetch the instruction.  */
-      inst = (unsigned long) riscv_fetch_instruction (gdbarch, cur_pc);
-      opcode = inst & 0x7F;
-      reg = (inst >> 7) & 0x1F;
-      rs1 = (inst >> 15) & 0x1F;
+      inst = riscv_fetch_instruction (gdbarch, cur_pc);
+
+      /* Decode the instruction.  These offsets are defined in the RISC-V ISA
+       * manual.  */
+      reg = riscv_decode_register_index(inst, 7);
+      rs1 = riscv_decode_register_index(inst, 15);
+      rs2 = riscv_decode_register_index(inst, 20);
       imm12 = (inst >> 20) & 0xFFF;
-      rs2 = (inst >> 20) & 0x1F;
       offset12 = (((inst >> 25) & 0x7F) << 5) + ((inst >> 7) & 0x1F);
-      funct3 = (inst >> 12) & 0x7;
 
       /* Look for common stack adjustment insns.  */
-      if ((opcode == 0x13 || opcode == 0x1B) && reg == RISCV_SP_REGNUM
-	  && rs1 == RISCV_SP_REGNUM)
+      if ((is_addi_insn(inst) || is_addiw_insn(inst))
+	  && reg == RISCV_SP_REGNUM && rs1 == RISCV_SP_REGNUM)
 	{
 	  /* addi sp, sp, -i */
 	  /* addiw sp, sp, -i */
@@ -863,17 +924,18 @@ riscv_scan_prologue (struct gdbarch *gdbarch,
 	    break;
 	  seen_sp_adjust = 1;
 	}
-      else if (opcode == 0x23 && funct3 == 0x2 && rs1 == RISCV_SP_REGNUM)
+      else if (is_sw_insn(inst) && rs1 == RISCV_SP_REGNUM)
 	{
 	  /* sw reg, offset(sp) */
 	  set_reg_offset (gdbarch, this_cache, rs1, sp + offset12);
 	}
-      else if (opcode == 0x23 && funct3 == 0x3 && rs1 == RISCV_SP_REGNUM)
+      else if (is_sd_insn(inst) && rs1 == RISCV_SP_REGNUM)
 	{
 	  /* sd reg, offset(sp) */
 	  set_reg_offset (gdbarch, this_cache, rs1, sp + offset12);
 	}
-      else if (opcode == 0x13 && reg == RISCV_FP_REGNUM && rs1 == RISCV_SP_REGNUM)
+      else if (is_addi_insn(inst) && reg == RISCV_FP_REGNUM
+	       && rs1 == RISCV_SP_REGNUM)
 	{
 	  /* addi s0, sp, size */
 	  if ((long)imm12 != frame_offset)
@@ -894,8 +956,9 @@ riscv_scan_prologue (struct gdbarch *gdbarch,
 	      goto restart;
 	    }
 	}
-      else if ((opcode == 0x33 || opcode == 0x3B) && reg == RISCV_FP_REGNUM
-	       && rs1 == RISCV_SP_REGNUM && rs2 == RISCV_ZERO_REGNUM)
+      else if ((is_add_insn(inst) || is_addw_insn(inst))
+	       && reg == RISCV_FP_REGNUM && rs1 == RISCV_SP_REGNUM
+               && rs2 == RISCV_ZERO_REGNUM)
 	{
 	  /* add s0, sp, 0 */
 	  /* addw s0, sp, 0 */
@@ -915,15 +978,16 @@ riscv_scan_prologue (struct gdbarch *gdbarch,
 		}
 	    }
 	}
-      else if (opcode == 0x23 && funct3 == 0x2 && rs1 == RISCV_FP_REGNUM)
+      else if (is_sw_insn(inst) && rs1 == RISCV_FP_REGNUM)
 	{
 	  /* sw reg, offset(s0) */
 	  set_reg_offset (gdbarch, this_cache, rs1, frame_addr + offset12);
 	}
       else if (reg == RISCV_GP_REGNUM
-	       && (opcode == 0x17 || opcode == 0x37
-		   || (opcode == 0x13 && rs1 == RISCV_GP_REGNUM)
-		   || (opcode == 0x33 && (rs1 == RISCV_GP_REGNUM
+	       && (is_auipc_insn(inst)
+                   || is_lui_insn(inst)
+		   || (is_addi_insn(inst) && rs1 == RISCV_GP_REGNUM)
+		   || (is_add_insn(inst) && (rs1 == RISCV_GP_REGNUM
 					  || rs2 == RISCV_GP_REGNUM))))
 	{
 	  /* auipc gp, n */
@@ -957,6 +1021,8 @@ riscv_scan_prologue (struct gdbarch *gdbarch,
 
   return end_prologue_addr;
 }
+
+/* Implement the riscv_skip_prologue gdbarch method.  */
 
 static CORE_ADDR
 riscv_skip_prologue (struct gdbarch *gdbarch,
@@ -1035,12 +1101,13 @@ riscv_push_dummy_call (struct gdbarch *gdbarch,
     {
       struct type *value_type = value_enclosing_type (args[i]);
       const gdb_byte *arg_bits = value_contents_all (args[i]);
-      int regnum = TYPE_CODE (value_type) == TYPE_CODE_FLT ?
-	RISCV_FA0_REGNUM : RISCV_A0_REGNUM;
+      int regnum = (TYPE_CODE (value_type) == TYPE_CODE_FLT
+		    ? RISCV_FA0_REGNUM : RISCV_A0_REGNUM);
 
       regcache_cooked_write_unsigned
 	(regcache, regnum + i,
-	 extract_unsigned_integer (arg_bits, tdep->register_size, byte_order));
+	 extract_unsigned_integer
+	   (arg_bits, riscv_isa_regsize(gdbarch), byte_order));
     }
 
   /* Store struct value address.  */
@@ -1060,11 +1127,15 @@ riscv_push_dummy_call (struct gdbarch *gdbarch,
   return sp;
 }
 
+/* Implement the frame_align gdbarch method.  */
+
 static CORE_ADDR
 riscv_frame_align (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
   return align_down (addr, 16);
 }
+
+/* Implement the unwind_pc gdbarch method.  */
 
 static CORE_ADDR
 riscv_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
@@ -1072,11 +1143,15 @@ riscv_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
   return frame_unwind_register_unsigned (next_frame, RISCV_PC_REGNUM);
 }
 
+/* Implement the unwind_sp gdbarch method.  */
+
 static CORE_ADDR
 riscv_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   return frame_unwind_register_unsigned (next_frame, RISCV_SP_REGNUM);
 }
+
+/* Implement the dummy_id gdbarch method.  */
 
 static struct frame_id
 riscv_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
@@ -1143,7 +1218,7 @@ static const struct frame_unwind riscv_frame_unwind =
 };
 
 static struct gdbarch *
-riscv_gdbarch_init (struct gdbarch_info  info,
+riscv_gdbarch_init (struct gdbarch_info info,
 		    struct gdbarch_list *arches)
 {
   struct gdbarch *gdbarch;
@@ -1193,35 +1268,22 @@ riscv_gdbarch_init (struct gdbarch_info  info,
   gdbarch = gdbarch_alloc (&info, tdep);
 
   tdep->riscv_abi = abi;
-  switch (abi)
-    {
-    case RISCV_ABI_FLAG_RV32I:
-      tdep->register_size = 4;
-      break;
-    case RISCV_ABI_FLAG_RV64I:
-      tdep->register_size = 8;
-      break;
-    default:
-      internal_error (__FILE__, __LINE__, _("unknown abi %i"), abi);
-      tdep->register_size = 4;
-      break;
-    }
+  tdep->supports_compressed_isa = AUTO_BOOLEAN_AUTO;
 
   /* Target data types.  */
   set_gdbarch_short_bit (gdbarch, 16);
   set_gdbarch_int_bit (gdbarch, 32);
-  set_gdbarch_long_bit (gdbarch, tdep->register_size * 8);
+  set_gdbarch_long_bit (gdbarch, riscv_isa_regsize (gdbarch) * 8);
   set_gdbarch_float_bit (gdbarch, 32);
   set_gdbarch_double_bit (gdbarch, 64);
   set_gdbarch_long_double_bit (gdbarch, 128);
-  set_gdbarch_ptr_bit (gdbarch, tdep->register_size * 8);
+  set_gdbarch_ptr_bit (gdbarch, riscv_isa_regsize (gdbarch) * 8);
   set_gdbarch_char_signed (gdbarch, 1);
 
   /* Information about the target architecture.  */
   set_gdbarch_return_value (gdbarch, riscv_return_value);
-  set_gdbarch_breakpoint_from_pc (gdbarch, riscv_breakpoint_from_pc);
-  set_gdbarch_remote_breakpoint_from_pc (gdbarch, riscv_remote_breakpoint_from_pc);
-  set_gdbarch_print_insn (gdbarch, print_insn_riscv);
+  set_gdbarch_breakpoint_kind_from_pc (gdbarch, riscv_breakpoint_kind_from_pc);
+  set_gdbarch_sw_breakpoint_from_kind (gdbarch, riscv_sw_breakpoint_from_kind);
 
   /* Register architecture.  */
   set_gdbarch_pseudo_register_read (gdbarch, riscv_pseudo_register_read);
@@ -1305,4 +1367,28 @@ void
 _initialize_riscv_tdep (void)
 {
   gdbarch_register (bfd_arch_riscv, riscv_gdbarch_init, NULL);
+
+  /* Add root prefix command for all "set riscv"/"show riscv" commands.  */
+  add_prefix_cmd ("riscv", no_class, set_riscv_command,
+      _("RISC-V specific commands."),
+      &setriscvcmdlist, "set riscv ", 0, &setlist);
+
+  add_prefix_cmd ("riscv", no_class, show_riscv_command,
+      _("RISC-V specific commands."),
+      &showriscvcmdlist, "show riscv ", 0, &showlist);
+
+  use_compressed_breakpoints = AUTO_BOOLEAN_AUTO;
+  add_setshow_auto_boolean_cmd ("use_compressed_breakpoints", no_class,
+      &use_compressed_breakpoints,
+      _("Configure whether to use compressed breakpoints."),
+      _("Show whether to use compressed breakpoints."),
+      _("\
+Debugging compressed code requires compressed breakpoints to be used. If left\n\
+to 'auto' then gdb will use them if $misa indicates the C extension is\n\
+supported. If that doesn't give the correct behavior, then this option can be\n\
+used."),
+      NULL,
+      NULL,
+      &setriscvcmdlist,
+      &showriscvcmdlist);
 }

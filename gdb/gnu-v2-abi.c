@@ -1,6 +1,6 @@
 /* Abstraction of GNU v2 abi.
 
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
 
    Contributed by Daniel Berlin <dberlin@redhat.com>
 
@@ -68,7 +68,7 @@ gnuv2_is_vtable_name (const char *name)
 static int
 gnuv2_is_operator_name (const char *name)
 {
-  return startswith (name, "operator");
+  return startswith (name, CP_OPERATOR_STR);
 }
 
 

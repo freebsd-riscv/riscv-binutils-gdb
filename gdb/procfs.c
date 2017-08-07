@@ -1,6 +1,6 @@
 /* Machine independent support for SVR4 /proc (process file system) for GDB.
 
-   Copyright (C) 1999-2016 Free Software Foundation, Inc.
+   Copyright (C) 1999-2017 Free Software Foundation, Inc.
 
    Written by Michael Snyder at Cygnus Solutions.
    Based on work by Fred Fish, Stu Grossman, Geoff Noer, and others.
@@ -122,8 +122,8 @@ static void procfs_pass_signals (struct target_ops *self,
 				 int, unsigned char *);
 static void procfs_kill_inferior (struct target_ops *ops);
 static void procfs_mourn_inferior (struct target_ops *ops);
-static void procfs_create_inferior (struct target_ops *, char *,
-				    char *, char **, int);
+static void procfs_create_inferior (struct target_ops *, const char *,
+				    const std::string &, char **, int);
 static ptid_t procfs_wait (struct target_ops *,
 			   ptid_t, struct target_waitstatus *, int);
 static enum target_xfer_status procfs_xfer_memory (gdb_byte *,
@@ -135,7 +135,7 @@ static target_xfer_partial_ftype procfs_xfer_partial;
 static int procfs_thread_alive (struct target_ops *ops, ptid_t);
 
 static void procfs_update_thread_list (struct target_ops *ops);
-static char *procfs_pid_to_str (struct target_ops *, ptid_t);
+static const char *procfs_pid_to_str (struct target_ops *, ptid_t);
 
 static int proc_find_memory_regions (struct target_ops *self,
 				     find_memory_region_ftype, void *);
@@ -421,7 +421,7 @@ static procinfo *find_procinfo (int pid, int tid);
 static procinfo *create_procinfo (int pid, int tid);
 static void destroy_procinfo (procinfo * p);
 static void do_destroy_procinfo_cleanup (void *);
-static void dead_procinfo (procinfo * p, char *msg, int killp);
+static void dead_procinfo (procinfo * p, const char *msg, int killp);
 static int open_procinfo_files (procinfo * p, int which);
 static void close_procinfo_files (procinfo * p);
 static int sysset_t_size (procinfo *p);
@@ -429,7 +429,7 @@ static sysset_t *sysset_t_alloc (procinfo * pi);
 #ifdef DYNAMIC_SYSCALLS
 static void load_syscalls (procinfo *pi);
 static void free_syscalls (procinfo *pi);
-static int find_syscall (procinfo *pi, char *name);
+static int find_syscall (procinfo *pi, const char *name);
 #endif /* DYNAMIC_SYSCALLS */
 
 static int iterate_over_mappings
@@ -801,7 +801,7 @@ enum { NOKILL, KILL };
    destroys the data structure.  */
 
 static void
-dead_procinfo (procinfo *pi, char *msg, int kill_p)
+dead_procinfo (procinfo *pi, const char *msg, int kill_p)
 {
   char procfile[80];
 
@@ -982,7 +982,7 @@ free_syscalls (procinfo *pi)
    If no match is found, return -1.  */
 
 static int
-find_syscall (procinfo *pi, char *name)
+find_syscall (procinfo *pi, const char *name)
 {
   int i;
 
@@ -1020,14 +1020,14 @@ static int proc_iterate_over_threads
    void *ptr);
 
 static void
-proc_warn (procinfo *pi, char *func, int line)
+proc_warn (procinfo *pi, const char *func, int line)
 {
   sprintf (errmsg, "procfs: %s line %d, %s", func, line, pi->pathname);
   print_sys_errmsg (errmsg, errno);
 }
 
 static void
-proc_error (procinfo *pi, char *func, int line)
+proc_error (procinfo *pi, const char *func, int line)
 {
   sprintf (errmsg, "procfs: %s line %d, %s", func, line, pi->pathname);
   perror_with_name (errmsg);
@@ -3066,7 +3066,7 @@ procfs_detach (struct target_ops *ops, const char *args, int from_tty)
 
   if (from_tty)
     {
-      char *exec_file;
+      const char *exec_file;
 
       exec_file = get_exec_file (0);
       if (exec_file == NULL)
@@ -3219,15 +3219,16 @@ procfs_fetch_registers (struct target_ops *ops,
 {
   gdb_gregset_t *gregs;
   procinfo *pi;
-  int pid = ptid_get_pid (inferior_ptid);
-  int tid = ptid_get_lwp (inferior_ptid);
+  ptid_t ptid = regcache_get_ptid (regcache);
+  int pid = ptid_get_pid (ptid);
+  int tid = ptid_get_lwp (ptid);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   pi = find_procinfo_or_die (pid, tid);
 
   if (pi == NULL)
     error (_("procfs: fetch_registers failed to find procinfo for %s"),
-	   target_pid_to_str (inferior_ptid));
+	   target_pid_to_str (ptid));
 
   gregs = proc_get_gregs (pi);
   if (gregs == NULL)
@@ -3268,15 +3269,16 @@ procfs_store_registers (struct target_ops *ops,
 {
   gdb_gregset_t *gregs;
   procinfo *pi;
-  int pid = ptid_get_pid (inferior_ptid);
-  int tid = ptid_get_lwp (inferior_ptid);
+  ptid_t ptid = regcache_get_ptid (regcache);
+  int pid = ptid_get_pid (ptid);
+  int tid = ptid_get_lwp (ptid);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   pi = find_procinfo_or_die (pid, tid);
 
   if (pi == NULL)
     error (_("procfs: store_registers: failed to find procinfo for %s"),
-	   target_pid_to_str (inferior_ptid));
+	   target_pid_to_str (ptid));
 
   gregs = proc_get_gregs (pi);
   if (gregs == NULL)
@@ -3413,26 +3415,24 @@ dbx_link_addr (bfd *abfd)
 static int
 insert_dbx_link_bpt_in_file (int fd, CORE_ADDR ignored)
 {
-  bfd *abfd;
   long storage_needed;
   CORE_ADDR sym_addr;
 
-  abfd = gdb_bfd_fdopenr ("unamed", 0, fd);
+  gdb_bfd_ref_ptr abfd (gdb_bfd_fdopenr ("unamed", 0, fd));
   if (abfd == NULL)
     {
       warning (_("Failed to create a bfd: %s."), bfd_errmsg (bfd_get_error ()));
       return 0;
     }
 
-  if (!bfd_check_format (abfd, bfd_object))
+  if (!bfd_check_format (abfd.get (), bfd_object))
     {
       /* Not the correct format, so we can not possibly find the dbx_link
 	 symbol in it.	*/
-      gdb_bfd_unref (abfd);
       return 0;
     }
 
-  sym_addr = dbx_link_addr (abfd);
+  sym_addr = dbx_link_addr (abfd.get ());
   if (sym_addr != 0)
     {
       struct breakpoint *dbx_link_bpt;
@@ -3444,14 +3444,11 @@ insert_dbx_link_bpt_in_file (int fd, CORE_ADDR ignored)
       if (dbx_link_bpt == NULL)
 	{
 	  warning (_("Failed to insert dbx_link breakpoint."));
-	  gdb_bfd_unref (abfd);
 	  return 0;
 	}
-      gdb_bfd_unref (abfd);
       return 1;
     }
 
-  gdb_bfd_unref (abfd);
   return 0;
 }
 
@@ -4380,7 +4377,7 @@ procfs_init_inferior (struct target_ops *ops, int pid)
   thread_change_ptid (pid_to_ptid (pid),
 		      ptid_build (pid, lwpid, 0));
 
-  startup_inferior (START_INFERIOR_TRAPS_EXPECTED);
+  gdb_startup_inferior (pid, START_INFERIOR_TRAPS_EXPECTED);
 
 #ifdef SYS_syssgi
   /* On mips-irix, we need to stop the inferior early enough during
@@ -4529,8 +4526,8 @@ procfs_set_exec_trap (void)
    inf-ptrace?  */
 
 static void
-procfs_create_inferior (struct target_ops *ops, char *exec_file,
-			char *allargs, char **env, int from_tty)
+procfs_create_inferior (struct target_ops *ops, const char *exec_file,
+			const std::string &allargs, char **env, int from_tty)
 {
   char *shell_file = getenv ("SHELL");
   char *tryname;
@@ -4560,11 +4557,11 @@ procfs_create_inferior (struct target_ops *ops, char *exec_file,
 	 if the caller is the superuser; failing to use it loses if
 	 there are ACLs or some such.  */
 
-      char *p;
-      char *p1;
+      const char *p;
+      const char *p1;
       /* FIXME-maybe: might want "set path" command so user can change what
 	 path is used from within GDB.  */
-      char *path = getenv ("PATH");
+      const char *path = getenv ("PATH");
       int len;
       struct stat statbuf;
 
@@ -4606,6 +4603,11 @@ procfs_create_inferior (struct target_ops *ops, char *exec_file,
 
   pid = fork_inferior (exec_file, allargs, env, procfs_set_exec_trap,
 		       NULL, NULL, shell_file, NULL);
+
+  /* We have something that executes now.  We'll be running through
+     the shell at this point (if startup-with-shell is true), but the
+     pid shouldn't change.  */
+  add_thread_silent (pid_to_ptid (pid));
 
   procfs_init_inferior (ops, pid);
 }
@@ -4694,7 +4696,7 @@ procfs_thread_alive (struct target_ops *ops, ptid_t ptid)
 /* Convert PTID to a string.  Returns the string in a static
    buffer.  */
 
-static char *
+static const char *
 procfs_pid_to_str (struct target_ops *ops, ptid_t ptid)
 {
   static char buf[80];

@@ -1,5 +1,5 @@
 /* BFD back-end for AMD 64 COFF files.
-   Copyright (C) 2006-2016 Free Software Foundation, Inc.
+   Copyright (C) 2006-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -182,9 +182,9 @@ coff_amd64_reloc (bfd *abfd,
 
 	case 4:
 	  {
-	    long long x = bfd_get_64 (abfd, addr);
+	    bfd_uint64_t x = bfd_get_64 (abfd, addr);
 	    DOIT (x);
-	    bfd_put_64 (abfd, (bfd_vma) x, addr);
+	    bfd_put_64 (abfd, x, addr);
 	  }
 	  break;
 

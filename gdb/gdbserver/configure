@@ -606,10 +606,6 @@ WARN_CFLAGS
 ustinc
 ustlibs
 ALLOCA
-SET_MAKE
-GMAKE_FALSE
-GMAKE_TRUE
-MAKE
 CCDEPMODE
 DEPDIR
 am__leading_dot
@@ -1335,8 +1331,9 @@ Optional Features:
   --disable-option-checking  ignore unrecognized --enable/--with options
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
-  --enable-maintainer-mode  enable make rules and dependencies not useful
-			  (and sometimes confusing) to the casual installer
+  --enable-maintainer-mode
+                          enable make rules and dependencies not useful (and
+                          sometimes confusing) to the casual installer
   --disable-largefile     omit support for large files
   --enable-libmcheck      Try linking with -lmcheck if available
   --enable-werror         treat compile warnings as errors
@@ -5949,95 +5946,6 @@ else CCDEPMODE=depmode=$am_cv_CC_dependencies_compiler_type
 fi
 
 
-# Check for the 'make' the user wants to use.
-for ac_prog in make
-do
-  # Extract the first word of "$ac_prog", so it can be a program name with args.
-set dummy $ac_prog; ac_word=$2
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-$as_echo_n "checking for $ac_word... " >&6; }
-if test "${ac_cv_prog_MAKE+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  if test -n "$MAKE"; then
-  ac_cv_prog_MAKE="$MAKE" # Let the user override the test.
-else
-as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  test -z "$as_dir" && as_dir=.
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
-    ac_cv_prog_MAKE="$ac_prog"
-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-fi
-fi
-MAKE=$ac_cv_prog_MAKE
-if test -n "$MAKE"; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $MAKE" >&5
-$as_echo "$MAKE" >&6; }
-else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-
-
-  test -n "$MAKE" && break
-done
-
-MAKE_IS_GNU=
-case "`$MAKE --version 2>&1 | sed 1q`" in
-  *GNU*)
-    MAKE_IS_GNU=yes
-    ;;
-esac
- if test "$MAKE_IS_GNU" = yes; then
-  GMAKE_TRUE=
-  GMAKE_FALSE='#'
-else
-  GMAKE_TRUE='#'
-  GMAKE_FALSE=
-fi
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether ${MAKE-make} sets \$(MAKE)" >&5
-$as_echo_n "checking whether ${MAKE-make} sets \$(MAKE)... " >&6; }
-set x ${MAKE-make}
-ac_make=`$as_echo "$2" | sed 's/+/p/g; s/[^a-zA-Z0-9_]/_/g'`
-if { as_var=ac_cv_prog_make_${ac_make}_set; eval "test \"\${$as_var+set}\" = set"; }; then :
-  $as_echo_n "(cached) " >&6
-else
-  cat >conftest.make <<\_ACEOF
-SHELL = /bin/sh
-all:
-	@echo '@@@%%%=$(MAKE)=@@@%%%'
-_ACEOF
-# GNU make sometimes prints "make[1]: Entering...", which would confuse us.
-case `${MAKE-make} -f conftest.make 2>/dev/null` in
-  *@@@%%%=?*=@@@%%%*)
-    eval ac_cv_prog_make_${ac_make}_set=yes;;
-  *)
-    eval ac_cv_prog_make_${ac_make}_set=no;;
-esac
-rm -f conftest.make
-fi
-if eval test \$ac_cv_prog_make_${ac_make}_set = yes; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-  SET_MAKE=
-else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-  SET_MAKE="MAKE=${MAKE-make}"
-fi
-
-
 gnulib_extra_configure_args=
 # If large-file support is disabled, make sure gnulib does the same.
 if test "$enable_largefile" = no; then
@@ -6847,7 +6755,7 @@ $as_echo "#define HAVE_LANGINFO_CODESET 1" >>confdefs.h
   fi
 
 
-  for ac_header in linux/perf_event.h locale.h memory.h signal.h 		   sys/resource.h sys/socket.h sys/syscall.h 		   sys/un.h sys/wait.h 		   thread_db.h wait.h
+  for ac_header in linux/perf_event.h locale.h memory.h signal.h 		   sys/resource.h sys/socket.h sys/syscall.h 		   sys/un.h sys/wait.h 		   thread_db.h wait.h 		   termios.h termio.h sgtty.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
 ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
@@ -7241,7 +7149,8 @@ build_warnings="-Wall -Wpointer-arith \
 -Wno-unused -Wunused-value -Wunused-function \
 -Wno-switch -Wno-char-subscripts \
 -Wempty-body -Wunused-but-set-parameter -Wunused-but-set-variable \
--Wno-sign-compare -Wno-write-strings -Wno-narrowing"
+-Wno-sign-compare -Wno-narrowing -Wno-error=maybe-uninitialized \
+-Wno-mismatched-tags"
 
 # Enable -Wno-format by default when using gcc on mingw since many
 # GCC versions complain about %I64.
@@ -7312,9 +7221,9 @@ $as_echo_n "checking compiler warning flags... " >&6; }
 	*)
 	    # Check whether GCC accepts it.
 	    saved_CFLAGS="$CFLAGS"
-	    CFLAGS="$CFLAGS $wtest"
+	    CFLAGS="$CFLAGS -Werror $wtest"
 	    saved_CXXFLAGS="$CXXFLAGS"
-	    CXXFLAGS="$CXXFLAGS $wtest"
+	    CXXFLAGS="$CXXFLAGS -Werror $wtest"
 	    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -7589,6 +7498,32 @@ _ACEOF
 
 
 fi
+
+
+# See if <sys/user.h> supports the %fs_base and %gs_bas amd64 segment registers.
+# Older amd64 Linux's don't have the fs_base and gs_base members of
+# `struct user_regs_struct'.
+ac_fn_c_check_member "$LINENO" "struct user_regs_struct" "fs_base" "ac_cv_member_struct_user_regs_struct_fs_base" "#include <sys/user.h>
+"
+if test "x$ac_cv_member_struct_user_regs_struct_fs_base" = x""yes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_USER_REGS_STRUCT_FS_BASE 1
+_ACEOF
+
+
+fi
+ac_fn_c_check_member "$LINENO" "struct user_regs_struct" "gs_base" "ac_cv_member_struct_user_regs_struct_gs_base" "#include <sys/user.h>
+"
+if test "x$ac_cv_member_struct_user_regs_struct_gs_base" = x""yes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_USER_REGS_STRUCT_GS_BASE 1
+_ACEOF
+
+
+fi
+
 
 
 ac_fn_c_check_type "$LINENO" "socklen_t" "ac_cv_type_socklen_t" "#include <sys/types.h>
@@ -8613,10 +8548,6 @@ LTLIBOBJS=$ac_ltlibobjs
 
 if test -z "${MAINTAINER_MODE_TRUE}" && test -z "${MAINTAINER_MODE_FALSE}"; then
   as_fn_error "conditional \"MAINTAINER_MODE\" was never defined.
-Usually this means the macro was only invoked conditionally." "$LINENO" 5
-fi
-if test -z "${GMAKE_TRUE}" && test -z "${GMAKE_FALSE}"; then
-  as_fn_error "conditional \"GMAKE\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 

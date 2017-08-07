@@ -1,5 +1,5 @@
 /* i370-specific support for 32-bit ELF
-   Copyright (C) 1994-2016 Free Software Foundation, Inc.
+   Copyright (C) 1994-2017 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
    Hacked by Linas Vepstas for i370 linas@linas.org
 
@@ -356,8 +356,8 @@ i370_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
     {
       _bfd_error_handler
 	/* xgettext:c-format */
-	(_("%B: uses different e_flags (0x%lx) fields than previous modules (0x%lx)"),
-	 ibfd, (long) new_flags, (long) old_flags);
+	(_("%B: uses different e_flags (%#x) fields than previous modules (%#x)"),
+	 ibfd, new_flags, old_flags);
 
       bfd_set_error (bfd_error_bad_value);
       return FALSE;
@@ -839,7 +839,7 @@ i370_elf_check_relocs (bfd *abfd,
 
 	  /* PR15323, ref flags aren't set for references in the same
 	     object.  */
-	  h->root.non_ir_ref = 1;
+	  h->root.non_ir_ref_regular = 1;
 	}
 
       if (bfd_link_pic (info))
@@ -884,7 +884,7 @@ i370_elf_finish_dynamic_sections (bfd *output_bfd,
 {
   asection *sdyn;
   bfd *dynobj = elf_hash_table (info)->dynobj;
-  asection *sgot = bfd_get_linker_section (dynobj, ".got");
+  asection *sgot = elf_hash_table (info)->sgot;
 
 #ifdef DEBUG
   fprintf (stderr, "i370_elf_finish_dynamic_sections called\n");
@@ -897,7 +897,7 @@ i370_elf_finish_dynamic_sections (bfd *output_bfd,
       asection *splt;
       Elf32_External_Dyn *dyncon, *dynconend;
 
-      splt = bfd_get_linker_section (dynobj, ".plt");
+      splt = elf_hash_table (info)->splt;
       BFD_ASSERT (splt != NULL && sdyn != NULL);
 
       dyncon = (Elf32_External_Dyn *) sdyn->contents;
@@ -905,35 +905,39 @@ i370_elf_finish_dynamic_sections (bfd *output_bfd,
       for (; dyncon < dynconend; dyncon++)
 	{
 	  Elf_Internal_Dyn dyn;
-	  const char *name;
+	  asection *s;
 	  bfd_boolean size;
 
 	  bfd_elf32_swap_dyn_in (dynobj, dyncon, &dyn);
 
 	  switch (dyn.d_tag)
 	    {
-	    case DT_PLTGOT:   name = ".plt";	  size = FALSE; break;
-	    case DT_PLTRELSZ: name = ".rela.plt"; size = TRUE;  break;
-	    case DT_JMPREL:   name = ".rela.plt"; size = FALSE; break;
-	    default:	      name = NULL;	  size = FALSE; break;
+	    case DT_PLTGOT:
+	      s = elf_hash_table (info)->splt;
+	      size = FALSE;
+	      break;
+	    case DT_PLTRELSZ:
+	      s = elf_hash_table (info)->srelplt;
+	      size = TRUE;
+	      break;
+	    case DT_JMPREL:
+	      s = elf_hash_table (info)->srelplt;
+	      size = FALSE;
+	      break;
+	    default:
+	      continue;
 	    }
 
-	  if (name != NULL)
+	  if (s == NULL)
+	    dyn.d_un.d_val = 0;
+	  else
 	    {
-	      asection *s;
-
-	      s = bfd_get_linker_section (dynobj, name);
-	      if (s == NULL)
-		dyn.d_un.d_val = 0;
+	      if (!size)
+		dyn.d_un.d_ptr = s->output_section->vma + s->output_offset;
 	      else
-		{
-		  if (! size)
-		    dyn.d_un.d_ptr = s->output_section->vma + s->output_offset;
-		  else
-		    dyn.d_un.d_val = s->size;
-		}
-	      bfd_elf32_swap_dyn_out (output_bfd, &dyn, dyncon);
+		dyn.d_un.d_val = s->size;
 	    }
+	  bfd_elf32_swap_dyn_out (output_bfd, &dyn, dyncon);
 	}
     }
 
@@ -1049,9 +1053,9 @@ i370_elf_relocate_section (bfd *output_bfd,
   bfd_boolean ret = TRUE;
 
 #ifdef DEBUG
-  _bfd_error_handler ("i370_elf_relocate_section called for %B section %A, %ld relocations%s",
+  _bfd_error_handler ("i370_elf_relocate_section called for %B section %A, %u relocations%s",
 		      input_bfd, input_section,
-		      (long) input_section->reloc_count,
+		      input_section->reloc_count,
 		      (bfd_link_relocatable (info)) ? " (relocatable)" : "");
 #endif
 

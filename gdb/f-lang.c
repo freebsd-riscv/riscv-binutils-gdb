@@ -1,6 +1,6 @@
 /* Fortran language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 1993-2016 Free Software Foundation, Inc.
+   Copyright (C) 1993-2017 Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C parser by Farooq Butt
    (fmbutt@engage.sps.mot.com).
@@ -203,7 +203,7 @@ f_language_arch_info (struct gdbarch *gdbarch,
 
 /* Remove the modules separator :: from the default break list.  */
 
-static char *
+static const char *
 f_word_break_characters (void)
 {
   static char *retval;
@@ -228,11 +228,14 @@ f_word_break_characters (void)
 /* Consider the modules separator :: as a valid symbol name character
    class.  */
 
-static VEC (char_ptr) *
-f_make_symbol_completion_list (const char *text, const char *word,
-			       enum type_code code)
+static void
+f_collect_symbol_completion_matches (completion_tracker &tracker,
+				     complete_symbol_mode mode,
+				     const char *text, const char *word,
+				     enum type_code code)
 {
-  return default_make_symbol_completion_list_break_on (text, word, ":", code);
+  default_collect_symbol_completion_matches_break_on (tracker, mode,
+						      text, word, ":", code);
 }
 
 static const char *f_extensions[] =
@@ -242,7 +245,7 @@ static const char *f_extensions[] =
   NULL
 };
 
-const struct language_defn f_language_defn =
+extern const struct language_defn f_language_defn =
 {
   "fortran",
   "Fortran",
@@ -282,11 +285,12 @@ const struct language_defn f_language_defn =
   0,				/* arrays are first-class (not c-style) */
   1,				/* String lower bound */
   f_word_break_characters,
-  f_make_symbol_completion_list,
+  f_collect_symbol_completion_matches,
   f_language_arch_info,
   default_print_array_index,
   default_pass_by_reference,
   default_get_string,
+  c_watch_location_expression,
   NULL,				/* la_get_symbol_name_cmp */
   iterate_over_symbols,
   &default_varobj_ops,
@@ -365,6 +369,4 @@ void
 _initialize_f_language (void)
 {
   f_type_data = gdbarch_data_register_post_init (build_fortran_types);
-
-  add_language (&f_language_defn);
 }

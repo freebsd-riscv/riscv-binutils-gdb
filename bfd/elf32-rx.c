@@ -1,5 +1,5 @@
 /* Renesas RX specific support for 32-bit ELF.
-   Copyright (C) 2008-2016 Free Software Foundation, Inc.
+   Copyright (C) 2008-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -683,7 +683,7 @@ rx_elf_relocate_section
 	  && strcmp (name, "__romdatastart") != 0			\
 	  && !saw_subtract)						\
 	/* xgettext:c-format */						\
-	_bfd_error_handler (_("%B(%A): unsafe PID relocation %s at 0x%08lx (against %s in %s)"), \
+	_bfd_error_handler (_("%B(%A): unsafe PID relocation %s at %#Lx (against %s in %s)"), \
 			    input_bfd, input_section, howto->name,	\
 			    input_section->output_section->vma + input_section->output_offset + rel->r_offset, \
 			    name, sec->name);				\
@@ -3142,8 +3142,9 @@ rx_elf_merge_private_bfd_data (bfd * ibfd, struct bfd_link_info *info)
 	    }
 	  else
 	    {
-	      _bfd_error_handler (_("There is a conflict merging the ELF header flags from %s"),
-				  bfd_get_filename (ibfd));
+	      _bfd_error_handler (_("There is a conflict merging the"
+				    " ELF header flags from %B"),
+				  ibfd);
 	      _bfd_error_handler (_("  the input  file's flags: %s"),
 				  describe_flags (new_flags));
 	      _bfd_error_handler (_("  the output file's flags: %s"),
@@ -3200,9 +3201,11 @@ rx_elf_object_p (bfd * abfd)
   int i;
   unsigned int u;
   Elf_Internal_Phdr *phdr = elf_tdata (abfd)->phdr;
-  int nphdrs = elf_elfheader (abfd)->e_phnum;
+  Elf_Internal_Ehdr *ehdr = elf_elfheader (abfd);
+  int nphdrs = ehdr->e_phnum;
   sec_ptr bsec;
   static int saw_be = FALSE;
+  bfd_vma end_phdroff;
 
   /* We never want to automatically choose the non-swapping big-endian
      target.  The user can only get that explicitly, such as with -I
@@ -3227,6 +3230,17 @@ rx_elf_object_p (bfd * abfd)
      corresponds (based on matching file offsets) and use its VMA
      information to reconstruct the p_vaddr field we clobbered when we
      wrote it out.  */
+  /* If PT_LOAD headers include the ELF file header or program headers
+     then the PT_LOAD header does not start with some section contents.
+     Making adjustments based on the difference between sh_offset and
+     p_offset is nonsense in such cases.  Exclude them.  Note that
+     since standard linker scripts for RX do not use SIZEOF_HEADERS,
+     the linker won't normally create PT_LOAD segments covering the
+     headers so this is mainly for passing the ld testsuite.
+     FIXME.  Why are we looking at non-PT_LOAD headers here?  */
+  end_phdroff = ehdr->e_ehsize;
+  if (ehdr->e_phoff != 0)
+    end_phdroff = ehdr->e_phoff + nphdrs * ehdr->e_phentsize;
   for (i=0; i<nphdrs; i++)
     {
       for (u=0; u<elf_tdata(abfd)->num_elf_sections; u++)
@@ -3234,6 +3248,7 @@ rx_elf_object_p (bfd * abfd)
 	  Elf_Internal_Shdr *sec = elf_tdata(abfd)->elf_sect_ptr[u];
 
 	  if (phdr[i].p_filesz
+	      && phdr[i].p_offset >= end_phdroff
 	      && phdr[i].p_offset <= (bfd_vma) sec->sh_offset
 	      && sec->sh_size > 0
 	      && sec->sh_type != SHT_NOBITS

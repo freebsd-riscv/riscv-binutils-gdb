@@ -1,5 +1,5 @@
 /* Alpha specific support for 64-bit ELF
-   Copyright (C) 1996-2016 Free Software Foundation, Inc.
+   Copyright (C) 1996-2017 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@tamu.edu>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -1300,6 +1300,7 @@ elf64_alpha_create_dynamic_sections (bfd *abfd, struct bfd_link_info *info)
 	   | SEC_LINKER_CREATED
 	   | (elf64_alpha_use_secureplt ? SEC_READONLY : 0));
   s = bfd_make_section_anyway_with_flags (abfd, ".plt", flags);
+  elf_hash_table (info)->splt = s;
   if (s == NULL || ! bfd_set_section_alignment (abfd, s, 4))
     return FALSE;
 
@@ -1314,6 +1315,7 @@ elf64_alpha_create_dynamic_sections (bfd *abfd, struct bfd_link_info *info)
   flags = (SEC_ALLOC | SEC_LOAD | SEC_HAS_CONTENTS | SEC_IN_MEMORY
 	   | SEC_LINKER_CREATED | SEC_READONLY);
   s = bfd_make_section_anyway_with_flags (abfd, ".rela.plt", flags);
+  elf_hash_table (info)->srelplt = s;
   if (s == NULL || ! bfd_set_section_alignment (abfd, s, 3))
     return FALSE;
 
@@ -1321,6 +1323,7 @@ elf64_alpha_create_dynamic_sections (bfd *abfd, struct bfd_link_info *info)
     {
       flags = SEC_ALLOC | SEC_LINKER_CREATED;
       s = bfd_make_section_anyway_with_flags (abfd, ".got.plt", flags);
+      elf_hash_table (info)->sgotplt = s;
       if (s == NULL || ! bfd_set_section_alignment (abfd, s, 3))
 	return FALSE;
     }
@@ -1337,6 +1340,7 @@ elf64_alpha_create_dynamic_sections (bfd *abfd, struct bfd_link_info *info)
   flags = (SEC_ALLOC | SEC_LOAD | SEC_HAS_CONTENTS | SEC_IN_MEMORY
 	   | SEC_LINKER_CREATED | SEC_READONLY);
   s = bfd_make_section_anyway_with_flags (abfd, ".rela.got", flags);
+  elf_hash_table (info)->srelgot = s;
   if (s == NULL
       || !bfd_set_section_alignment (abfd, s, 3))
     return FALSE;
@@ -1834,7 +1838,7 @@ elf64_alpha_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
 	  /* PR15323, ref flags aren't set for references in the same
 	     object.  */
-	  h->root.root.non_ir_ref = 1;
+	  h->root.root.non_ir_ref_regular = 1;
 	  h->root.ref_regular = 1;
 	}
 
@@ -2128,7 +2132,7 @@ elf64_alpha_adjust_dynamic_symbol (struct bfd_link_info *info,
     {
       h->needs_plt = TRUE;
 
-      s = bfd_get_linker_section (dynobj, ".plt");
+      s = elf_hash_table(info)->splt;
       if (!s && !elf64_alpha_create_dynamic_sections (dynobj, info))
 	return FALSE;
 
@@ -2612,15 +2616,13 @@ elf64_alpha_size_plt_section (struct bfd_link_info *info)
 {
   asection *splt, *spltrel, *sgotplt;
   unsigned long entries;
-  bfd *dynobj;
   struct alpha_elf_link_hash_table * htab;
 
   htab = alpha_elf_hash_table (info);
   if (htab == NULL)
     return;
 
-  dynobj = elf_hash_table(info)->dynobj;
-  splt = bfd_get_linker_section (dynobj, ".plt");
+  splt = elf_hash_table(info)->splt;
   if (splt == NULL)
     return;
 
@@ -2630,7 +2632,7 @@ elf64_alpha_size_plt_section (struct bfd_link_info *info)
 				elf64_alpha_size_plt_section_1, splt);
 
   /* Every plt entry requires a JMP_SLOT relocation.  */
-  spltrel = bfd_get_linker_section (dynobj, ".rela.plt");
+  spltrel = elf_hash_table(info)->srelplt;
   entries = 0;
   if (splt->size)
     {
@@ -2646,7 +2648,7 @@ elf64_alpha_size_plt_section (struct bfd_link_info *info)
      entire contents of the .got.plt section.  */
   if (elf64_alpha_use_secureplt)
     {
-      sgotplt = bfd_get_linker_section (dynobj, ".got.plt");
+      sgotplt = elf_hash_table(info)->sgotplt;
       sgotplt->size = entries ? 16 : 0;
     }
 }
@@ -2806,8 +2808,7 @@ elf64_alpha_size_rela_got_1 (struct alpha_elf_link_hash_entry *h,
 
   if (entries > 0)
     {
-      bfd *dynobj = elf_hash_table(info)->dynobj;
-      asection *srel = bfd_get_linker_section (dynobj, ".rela.got");
+      asection *srel = elf_hash_table(info)->srelgot;
       BFD_ASSERT (srel != NULL);
       srel->size += sizeof (Elf64_External_Rela) * entries;
     }
@@ -2821,7 +2822,7 @@ static void
 elf64_alpha_size_rela_got_section (struct bfd_link_info *info)
 {
   unsigned long entries;
-  bfd *i, *dynobj;
+  bfd *i;
   asection *srel;
   struct alpha_elf_link_hash_table * htab;
 
@@ -2857,8 +2858,7 @@ elf64_alpha_size_rela_got_section (struct bfd_link_info *info)
 	}
     }
 
-  dynobj = elf_hash_table(info)->dynobj;
-  srel = bfd_get_linker_section (dynobj, ".rela.got");
+  srel = elf_hash_table(info)->srelgot;
   if (!srel)
     {
       BFD_ASSERT (entries == 0);
@@ -2879,7 +2879,7 @@ elf64_alpha_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 {
   bfd *dynobj;
   asection *s;
-  bfd_boolean relplt;
+  bfd_boolean relplt, relocs;
   struct alpha_elf_link_hash_table * htab;
 
   htab = alpha_elf_hash_table (info);
@@ -2916,6 +2916,7 @@ elf64_alpha_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
      determined the sizes of the various dynamic sections.  Allocate
      memory for them.  */
   relplt = FALSE;
+  relocs = FALSE;
   for (s = dynobj->sections; s != NULL; s = s->next)
     {
       const char *name;
@@ -2933,6 +2934,8 @@ elf64_alpha_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 	    {
 	      if (strcmp (name, ".rela.plt") == 0)
 		relplt = TRUE;
+	      else
+		relocs = TRUE;
 
 	      /* We use the reloc_count field as a counter if we need
 		 to copy relocs into the output file.  */
@@ -2997,15 +3000,18 @@ elf64_alpha_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 	    return FALSE;
 	}
 
-      if (!add_dynamic_entry (DT_RELA, 0)
-	  || !add_dynamic_entry (DT_RELASZ, 0)
-	  || !add_dynamic_entry (DT_RELAENT, sizeof (Elf64_External_Rela)))
-	return FALSE;
-
-      if (info->flags & DF_TEXTREL)
+      if (relocs)
 	{
-	  if (!add_dynamic_entry (DT_TEXTREL, 0))
+	  if (!add_dynamic_entry (DT_RELA, 0)
+	      || !add_dynamic_entry (DT_RELASZ, 0)
+	      || !add_dynamic_entry (DT_RELAENT, sizeof (Elf64_External_Rela)))
 	    return FALSE;
+
+	  if (info->flags & DF_TEXTREL)
+	    {
+	      if (!add_dynamic_entry (DT_TEXTREL, 0))
+		return FALSE;
+	    }
 	}
     }
 #undef add_dynamic_entry
@@ -3075,9 +3081,8 @@ elf64_alpha_relax_got_load (struct alpha_relax_info *info, bfd_vma symval,
       reloc_howto_type *howto = elf64_alpha_howto_table + r_type;
       _bfd_error_handler
 	/* xgettext:c-format */
-	(_("%B: %A+0x%lx: warning: %s relocation against unexpected insn"),
-	 info->abfd, info->sec,
-	 (unsigned long) irel->r_offset, howto->name);
+	(_("%B: %A+%#Lx: warning: %s relocation against unexpected insn"),
+	 info->abfd, info->sec, irel->r_offset, howto->name);
       return TRUE;
     }
 
@@ -3215,7 +3220,9 @@ elf64_alpha_relax_opt_call (struct alpha_relax_info *info, bfd_vma symval)
 	  if (tsec_relocs == NULL)
 	    return 0;
 	  tsec_relend = tsec_relocs + info->tsec->reloc_count;
-	  tsec_free = (info->link_info->keep_memory ? NULL : tsec_relocs);
+	  tsec_free = (elf_section_data (info->tsec)->relocs == tsec_relocs
+		       ? NULL
+		       : tsec_relocs);
 	}
 
       /* Recover the symbol's offset within the section.  */
@@ -3269,9 +3276,8 @@ elf64_alpha_relax_with_lituse (struct alpha_relax_info *info,
     {
       _bfd_error_handler
 	/* xgettext:c-format */
-	(_("%B: %A+0x%lx: warning: LITERAL relocation against unexpected insn"),
-	 abfd, info->sec,
-	 (unsigned long) irel->r_offset);
+	(_("%B: %A+%#Lx: warning: LITERAL relocation against unexpected insn"),
+	 abfd, info->sec, irel->r_offset);
       return TRUE;
     }
 
@@ -4238,10 +4244,7 @@ elf64_alpha_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
   symtab_hdr = &elf_symtab_hdr (input_bfd);
 
   dynobj = elf_hash_table (info)->dynobj;
-  if (dynobj)
-    srelgot = bfd_get_linker_section (dynobj, ".rela.got");
-  else
-    srelgot = NULL;
+  srelgot = elf_hash_table (info)->srelgot;
 
   if (input_section->flags & SEC_ALLOC)
     {
@@ -4866,7 +4869,6 @@ elf64_alpha_finish_dynamic_symbol (bfd *output_bfd, struct bfd_link_info *info,
 				   Elf_Internal_Sym *sym)
 {
   struct alpha_elf_link_hash_entry *ah = (struct alpha_elf_link_hash_entry *)h;
-  bfd *dynobj = elf_hash_table(info)->dynobj;
 
   if (h->needs_plt)
     {
@@ -4880,9 +4882,9 @@ elf64_alpha_finish_dynamic_symbol (bfd *output_bfd, struct bfd_link_info *info,
 
       BFD_ASSERT (h->dynindx != -1);
 
-      splt = bfd_get_linker_section (dynobj, ".plt");
+      splt = elf_hash_table (info)->splt;
       BFD_ASSERT (splt != NULL);
-      srel = bfd_get_linker_section (dynobj, ".rela.plt");
+      srel = elf_hash_table (info)->srelplt;
       BFD_ASSERT (srel != NULL);
 
       for (gotent = ah->got_entries; gotent ; gotent = gotent->next)
@@ -4952,7 +4954,7 @@ elf64_alpha_finish_dynamic_symbol (bfd *output_bfd, struct bfd_link_info *info,
       asection *srel;
       struct alpha_elf_got_entry *gotent;
 
-      srel = bfd_get_linker_section (dynobj, ".rela.got");
+      srel = elf_hash_table (info)->srelgot;
       BFD_ASSERT (srel != NULL);
 
       for (gotent = ((struct alpha_elf_link_hash_entry *) h)->got_entries;
@@ -5025,8 +5027,8 @@ elf64_alpha_finish_dynamic_sections (bfd *output_bfd,
       Elf64_External_Dyn *dyncon, *dynconend;
       bfd_vma plt_vma, gotplt_vma;
 
-      splt = bfd_get_linker_section (dynobj, ".plt");
-      srelaplt = bfd_get_linker_section (dynobj, ".rela.plt");
+      splt = elf_hash_table (info)->splt;
+      srelaplt = elf_hash_table (info)->srelplt;
       BFD_ASSERT (splt != NULL && sdyn != NULL);
 
       plt_vma = splt->output_section->vma + splt->output_offset;
@@ -5034,7 +5036,7 @@ elf64_alpha_finish_dynamic_sections (bfd *output_bfd,
       gotplt_vma = 0;
       if (elf64_alpha_use_secureplt)
 	{
-	  sgotplt = bfd_get_linker_section (dynobj, ".got.plt");
+	  sgotplt = elf_hash_table (info)->sgotplt;
 	  BFD_ASSERT (sgotplt != NULL);
 	  if (sgotplt->size > 0)
 	    gotplt_vma = sgotplt->output_section->vma + sgotplt->output_offset;
@@ -5060,16 +5062,6 @@ elf64_alpha_finish_dynamic_sections (bfd *output_bfd,
 	    case DT_JMPREL:
 	      dyn.d_un.d_ptr = srelaplt ? (srelaplt->output_section->vma
 					   + srelaplt->output_offset) : 0;
-	      break;
-
-	    case DT_RELASZ:
-	      /* My interpretation of the TIS v1.1 ELF document indicates
-		 that RELASZ should not include JMPREL.  This is not what
-		 the rest of the BFD does.  It is, however, what the
-		 glibc ld.so wants.  Do this fixup here until we found
-		 out who is right.  */
-	      if (srelaplt)
-		dyn.d_un.d_val -= srelaplt->size;
 	      break;
 	    }
 
@@ -5600,6 +5592,7 @@ static const struct elf_size_info alpha_elf_size_info =
 #define elf_backend_plt_readonly 0
 #define elf_backend_want_plt_sym 1
 #define elf_backend_got_header_size 0
+#define elf_backend_dtrel_excludes_plt 1
 
 #include "elf64-target.h"
 

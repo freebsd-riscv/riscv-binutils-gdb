@@ -1,6 +1,6 @@
 /* Common definitions.
 
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -82,12 +82,13 @@
 #include "common-debug.h"
 #include "cleanups.h"
 #include "common-exceptions.h"
+#include "common/poison.h"
 
 #define EXTERN_C extern "C"
 #define EXTERN_C_PUSH extern "C" {
 #define EXTERN_C_POP }
 
-/* Pull in gdb::unique_ptr and gdb::unique_xmalloc_ptr.  */
+/* Pull in gdb::unique_xmalloc_ptr.  */
 #include "common/gdb_unique_ptr.h"
 
 #endif /* COMMON_DEFS_H */

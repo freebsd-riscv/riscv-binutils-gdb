@@ -1,5 +1,5 @@
 /* Disassemble D10V instructions.
-   Copyright (C) 1996-2016 Free Software Foundation, Inc.
+   Copyright (C) 1996-2017 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -21,7 +21,7 @@
 #include "sysdep.h"
 #include <stdio.h>
 #include "opcode/d10v.h"
-#include "dis-asm.h"
+#include "disassemble.h"
 
 /* The PC wraps at 18 bits, except for the segment number,
    so use this mask to keep the parts we want.  */
@@ -121,7 +121,7 @@ print_operand (struct d10v_operand *oper,
 	      neg = 1;
 	    }
 	  num = num << 2;
-	  if (info->flags & INSN_HAS_RELOC)
+	  if (info->reloc)
 	    (*info->print_address_func) (num & PC_MASK, info);
 	  else
 	    {

@@ -1,6 +1,6 @@
 /* Top level stuff for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -224,7 +224,7 @@ get_init_files (const char **system_gdbinit,
 	    {
 	      /* Append the part of SYSTEM_GDBINIT that follows GDB_DATADIR
 		 to gdb_datadir.  */
-	      char *tmp_sys_gdbinit = xstrdup (SYSTEM_GDBINIT + datadir_len);
+	      char *tmp_sys_gdbinit = xstrdup (&SYSTEM_GDBINIT[datadir_len]);
 	      char *p;
 
 	      for (p = tmp_sys_gdbinit; IS_DIR_SEPARATOR (*p); ++p)
@@ -444,7 +444,12 @@ enum cmdarg_kind
 };
 
 /* Arguments of --command option and its counterpart.  */
-struct cmdarg {
+struct cmdarg
+{
+  cmdarg (cmdarg_kind type_, char *string_)
+    : type (type_), string (string_)
+  {}
+
   /* Type of this option.  */
   enum cmdarg_kind type;
 
@@ -540,7 +545,9 @@ captured_main_1 (struct captured_main_args *context)
 #endif
 
   /* Prefix warning messages with the command name.  */
-  warning_pre_print = xstrprintf ("%s: warning: ", gdb_program_name);
+  gdb::unique_xmalloc_ptr<char> tmp_warn_preprint
+    (xstrprintf ("%s: warning: ", gdb_program_name));
+  warning_pre_print = tmp_warn_preprint.get ();
 
   if (! getcwd (gdb_dirbuf, sizeof (gdb_dirbuf)))
     perror_warning_with_name (_("error finding working directory"));
@@ -745,36 +752,20 @@ captured_main_1 (struct captured_main_args *context)
 	    pidarg = optarg;
 	    break;
 	  case 'x':
-	    {
-	      struct cmdarg cmdarg = { CMDARG_FILE, optarg };
-
-	      cmdarg_vec.push_back (cmdarg);
-	    }
+	    cmdarg_vec.emplace_back (CMDARG_FILE, optarg);
 	    break;
 	  case 'X':
-	    {
-	      struct cmdarg cmdarg = { CMDARG_COMMAND, optarg };
-
-	      cmdarg_vec.push_back (cmdarg);
-	    }
+	    cmdarg_vec.emplace_back (CMDARG_COMMAND, optarg);
 	    break;
 	  case OPT_IX:
-	    {
-	      struct cmdarg cmdarg = { CMDARG_INIT_FILE, optarg };
-
-	      cmdarg_vec.push_back (cmdarg);
-	    }
+	    cmdarg_vec.emplace_back (CMDARG_INIT_FILE, optarg);
 	    break;
 	  case OPT_IEX:
-	    {
-	      struct cmdarg cmdarg = { CMDARG_INIT_COMMAND, optarg };
-
-	      cmdarg_vec.push_back (cmdarg);
-	    }
+	    cmdarg_vec.emplace_back (CMDARG_INIT_COMMAND, optarg);
 	    break;
 	  case 'B':
 	    batch_flag = batch_silent = 1;
-	    gdb_stdout = ui_file_new();
+	    gdb_stdout = new null_file ();
 	    break;
 	  case 'D':
 	    if (optarg[0] == '\0')
@@ -983,7 +974,7 @@ captured_main_1 (struct captured_main_args *context)
     }
 
   /* Set off error and warning messages with a blank line.  */
-  xfree (warning_pre_print);
+  tmp_warn_preprint.reset ();
   warning_pre_print = _("\nwarning: ");
 
   /* Read and execute the system-wide gdbinit file, if it exists.

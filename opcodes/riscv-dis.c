@@ -1,5 +1,5 @@
 /* RISC-V disassembler
-   Copyright 2011-2016 Free Software Foundation, Inc.
+   Copyright (C) 2011-2017 Free Software Foundation, Inc.
 
    Contributed by Andrew Waterman (andrew@sifive.com).
    Based on MIPS target.
@@ -21,7 +21,7 @@
    see <http://www.gnu.org/licenses/>.  */
 
 #include "sysdep.h"
-#include "dis-asm.h"
+#include "disassemble.h"
 #include "libiberty.h"
 #include "opcode/riscv.h"
 #include "opintl.h"
@@ -153,6 +153,7 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc, disassemble_info *info)
 	    case 'i':
 	      print (info->stream, "%d", (int)EXTRACT_RVC_SIMM3 (l));
 	      break;
+	    case 'o':
 	    case 'j':
 	      print (info->stream, "%d", (int)EXTRACT_RVC_IMM (l));
 	      break;
@@ -255,6 +256,7 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc, disassemble_info *info)
 
 	case 'o':
 	  maybe_print_address (pd, rs1, EXTRACT_ITYPE_IMM (l));
+	  /* Fall through.  */
 	case 'j':
 	  if (((l & MASK_ADDI) == MATCH_ADDI && rs1 != 0)
 	      || (l & MASK_JALR) == MATCH_JALR)
@@ -383,7 +385,7 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 	pd->hi_addr[i] = -1;
 
       for (i = 0; i < info->symtab_size; i++)
-	if (strcmp (bfd_asymbol_name (info->symtab[i]), "_gp") == 0)
+	if (strcmp (bfd_asymbol_name (info->symtab[i]), RISCV_GP_SYMBOL) == 0)
 	  pd->gp = bfd_asymbol_value (info->symtab[i]);
     }
   else
@@ -406,8 +408,12 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
     {
       int xlen = 0;
 
-      /* The incoming section might not always be complete.  */
-      if (info->section != NULL)
+      /* If XLEN is not known, get its value from the ELF class.  */
+      if (info->mach == bfd_mach_riscv64)
+	xlen = 64;
+      else if (info->mach == bfd_mach_riscv32)
+	xlen = 32;
+      else if (info->section != NULL)
 	{
 	  Elf_Internal_Ehdr *ehdr = elf_elfheader (info->section->owner);
 	  xlen = ehdr->e_ident[EI_CLASS] == ELFCLASS64 ? 64 : 32;
@@ -465,6 +471,13 @@ print_insn_riscv (bfd_vma memaddr, struct disassemble_info *info)
   else if (riscv_gpr_names == NULL)
     set_default_riscv_dis_options ();
 
+  /* Checks to see if we're inside a R_RISCV_ALIGN, if so */
+  if (info->reloc != NULL && info->reloc->howto->type == R_RISCV_ALIGN)
+    {
+      (*info->fprintf_func) (info->stream, "# R_RISCV_ALIGN");
+      return info->reloc->addend;
+    }
+
   /* Instructions are a sequence of 2-byte packets in little-endian order.  */
   for (n = 0; n < sizeof (insn) && n < riscv_insn_length (insn); n += 2)
     {
@@ -492,7 +505,7 @@ The following RISC-V-specific disassembler options are supported for use\n\
 with the -M switch (multiple options should be separated by commas):\n"));
 
   fprintf (stream, _("\n\
-  numeric       Print numeric reigster names, rather than ABI names.\n"));
+  numeric       Print numeric register names, rather than ABI names.\n"));
 
   fprintf (stream, _("\n\
   no-aliases    Disassemble only into canonical instructions, rather\n\

@@ -2,7 +2,7 @@
    convert to internal format, for GDB. Used as a last resort if no
    debugging symbols recognized.
 
-   Copyright (C) 2003-2016 Free Software Foundation, Inc.
+   Copyright (C) 2003-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -54,7 +54,7 @@ struct read_pe_section_data
   enum minimal_symbol_type ms_type;	/* Type to assign symbols in
 					   section.  */
   unsigned int index;		/* BFD section number.  */
-  char *section_name;		/* Recorded section name.  */
+  const char *section_name;	/* Recorded section name.  */
 };
 
 #define IMAGE_SCN_CNT_CODE 0x20

@@ -1,5 +1,5 @@
 /* linker.c -- BFD linker routines
-   Copyright (C) 1993-2016 Free Software Foundation, Inc.
+   Copyright (C) 1993-2017 Free Software Foundation, Inc.
    Written by Steve Chamberlain and Ian Lance Taylor, Cygnus Support
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -403,21 +403,12 @@ SUBSUBSECTION
 */
 
 static bfd_boolean generic_link_add_object_symbols
-  (bfd *, struct bfd_link_info *, bfd_boolean collect);
-static bfd_boolean generic_link_add_symbols
-  (bfd *, struct bfd_link_info *, bfd_boolean);
-static bfd_boolean generic_link_check_archive_element_no_collect
-  (bfd *, struct bfd_link_info *, struct bfd_link_hash_entry *, const char *,
-   bfd_boolean *);
-static bfd_boolean generic_link_check_archive_element_collect
-  (bfd *, struct bfd_link_info *, struct bfd_link_hash_entry *, const char *,
-   bfd_boolean *);
+  (bfd *, struct bfd_link_info *);
 static bfd_boolean generic_link_check_archive_element
   (bfd *, struct bfd_link_info *, struct bfd_link_hash_entry *, const char *,
-   bfd_boolean *, bfd_boolean);
+   bfd_boolean *);
 static bfd_boolean generic_link_add_symbol_list
-  (bfd *, struct bfd_link_info *, bfd_size_type count, asymbol **,
-   bfd_boolean);
+  (bfd *, struct bfd_link_info *, bfd_size_type count, asymbol **);
 static bfd_boolean generic_add_output_symbol
   (bfd *, size_t *psymalloc, asymbol *);
 static bfd_boolean default_data_link_order
@@ -816,29 +807,6 @@ bfd_generic_link_read_symbols (bfd *abfd)
   return TRUE;
 }
 
-/* Generic function to add symbols to from an object file to the
-   global hash table.  This version does not automatically collect
-   constructors by name.  */
-
-bfd_boolean
-_bfd_generic_link_add_symbols (bfd *abfd, struct bfd_link_info *info)
-{
-  return generic_link_add_symbols (abfd, info, FALSE);
-}
-
-/* Generic function to add symbols from an object file to the global
-   hash table.  This version automatically collects constructors by
-   name, as the collect2 program does.  It should be used for any
-   target which does not provide some other mechanism for setting up
-   constructors and destructors; these are approximately those targets
-   for which gcc uses collect2 and do not support stabs.  */
-
-bfd_boolean
-_bfd_generic_link_add_symbols_collect (bfd *abfd, struct bfd_link_info *info)
-{
-  return generic_link_add_symbols (abfd, info, TRUE);
-}
-
 /* Indicate that we are only retrieving symbol values from this
    section.  We want the symbols to act as though the values in the
    file are absolute.  */
@@ -862,26 +830,22 @@ _bfd_generic_copy_link_hash_symbol_type (bfd *abfd ATTRIBUTE_UNUSED,
 {
 }
 
-/* Add symbols from an object file to the global hash table.  */
+/* Generic function to add symbols from an object file to the
+   global hash table.  */
 
-static bfd_boolean
-generic_link_add_symbols (bfd *abfd,
-			  struct bfd_link_info *info,
-			  bfd_boolean collect)
+bfd_boolean
+_bfd_generic_link_add_symbols (bfd *abfd, struct bfd_link_info *info)
 {
   bfd_boolean ret;
 
   switch (bfd_get_format (abfd))
     {
     case bfd_object:
-      ret = generic_link_add_object_symbols (abfd, info, collect);
+      ret = generic_link_add_object_symbols (abfd, info);
       break;
     case bfd_archive:
       ret = (_bfd_generic_link_add_archive_symbols
-	     (abfd, info,
-	      (collect
-	       ? generic_link_check_archive_element_collect
-	       : generic_link_check_archive_element_no_collect)));
+	     (abfd, info, generic_link_check_archive_element));
       break;
     default:
       bfd_set_error (bfd_error_wrong_format);
@@ -895,8 +859,7 @@ generic_link_add_symbols (bfd *abfd,
 
 static bfd_boolean
 generic_link_add_object_symbols (bfd *abfd,
-				 struct bfd_link_info *info,
-				 bfd_boolean collect)
+				 struct bfd_link_info *info)
 {
   bfd_size_type symcount;
   struct bfd_symbol **outsyms;
@@ -905,7 +868,7 @@ generic_link_add_object_symbols (bfd *abfd,
     return FALSE;
   symcount = _bfd_generic_link_get_symcount (abfd);
   outsyms = _bfd_generic_link_get_symbols (abfd);
-  return generic_link_add_symbol_list (abfd, info, symcount, outsyms, collect);
+  return generic_link_add_symbol_list (abfd, info, symcount, outsyms);
 }
 
 /* Generic function to add symbols from an archive file to the global
@@ -1044,47 +1007,14 @@ _bfd_generic_link_add_archive_symbols
   return FALSE;
 }
 
-/* See if we should include an archive element.  This version is used
-   when we do not want to automatically collect constructors based on
-   the symbol name, presumably because we have some other mechanism
-   for finding them.  */
-
-static bfd_boolean
-generic_link_check_archive_element_no_collect (bfd *abfd,
-					       struct bfd_link_info *info,
-					       struct bfd_link_hash_entry *h,
-					       const char *name,
-					       bfd_boolean *pneeded)
-{
-  return generic_link_check_archive_element (abfd, info, h, name, pneeded,
-					     FALSE);
-}
-
-/* See if we should include an archive element.  This version is used
-   when we want to automatically collect constructors based on the
-   symbol name, as collect2 does.  */
-
-static bfd_boolean
-generic_link_check_archive_element_collect (bfd *abfd,
-					    struct bfd_link_info *info,
-					    struct bfd_link_hash_entry *h,
-					    const char *name,
-					    bfd_boolean *pneeded)
-{
-  return generic_link_check_archive_element (abfd, info, h, name, pneeded,
-					     TRUE);
-}
-
-/* See if we should include an archive element.  Optionally collect
-   constructors.  */
+/* See if we should include an archive element.  */
 
 static bfd_boolean
 generic_link_check_archive_element (bfd *abfd,
 				    struct bfd_link_info *info,
 				    struct bfd_link_hash_entry *h,
 				    const char *name ATTRIBUTE_UNUSED,
-				    bfd_boolean *pneeded,
-				    bfd_boolean collect)
+				    bfd_boolean *pneeded)
 {
   asymbol **pp, **ppend;
 
@@ -1134,7 +1064,7 @@ generic_link_check_archive_element (bfd *abfd,
 	    return FALSE;
 	  /* Potentially, the add_archive_element hook may have set a
 	     substitute BFD for us.  */
-	  return generic_link_add_object_symbols (abfd, info, collect);
+	  return bfd_link_add_symbols (abfd, info);
 	}
 
       /* P is a common symbol.  */
@@ -1192,16 +1122,13 @@ generic_link_check_archive_element (bfd *abfd,
 
 /* Add the symbols from an object file to the global hash table.  ABFD
    is the object file.  INFO is the linker information.  SYMBOL_COUNT
-   is the number of symbols.  SYMBOLS is the list of symbols.  COLLECT
-   is TRUE if constructors should be automatically collected by name
-   as is done by collect2.  */
+   is the number of symbols.  SYMBOLS is the list of symbols.  */
 
 static bfd_boolean
 generic_link_add_symbol_list (bfd *abfd,
 			      struct bfd_link_info *info,
 			      bfd_size_type symbol_count,
-			      asymbol **symbols,
-			      bfd_boolean collect)
+			      asymbol **symbols)
 {
   asymbol **pp, **ppend;
 
@@ -1247,7 +1174,7 @@ generic_link_add_symbol_list (bfd *abfd,
 	  bh = NULL;
 	  if (! (_bfd_generic_link_add_one_symbol
 		 (info, abfd, name, p->flags, bfd_get_section (p),
-		  p->value, string, FALSE, collect, &bh)))
+		  p->value, string, FALSE, FALSE, &bh)))
 	    return FALSE;
 	  h = (struct generic_link_hash_entry *) bh;
 
@@ -1478,8 +1405,7 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
       if (!bfd_link_relocatable (info)
 	  && strcmp (name, "__gnu_lto_slim") == 0)
 	_bfd_error_handler
-	  (_("%s: plugin needed to handle lto object"),
-	   bfd_get_filename (abfd));
+	  (_("%B: plugin needed to handle lto object"), abfd);
     }
   else
     row = DEF_ROW;
@@ -1809,7 +1735,8 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	     otherwise add a warning.  */
 	  if ((!info->lto_plugin_active
 	       && (h->u.undef.next != NULL || info->hash->undefs_tail == h))
-	      || h->non_ir_ref)
+	      || h->non_ir_ref_regular
+	      || h->non_ir_ref_dynamic)
 	    {
 	      (*info->callbacks->warning) (info, string, h->root.string,
 					   hash_entry_bfd (h), NULL, 0);
@@ -2164,7 +2091,7 @@ _bfd_generic_link_output_symbols (bfd *output_bfd,
 	      && bfd_hash_lookup (info->keep_hash, bfd_asymbol_name (sym),
 				  FALSE, FALSE) == NULL))
 	output = FALSE;
-      else if ((sym->flags & (BSF_GLOBAL | BSF_WEAK)) != 0)
+      else if ((sym->flags & (BSF_GLOBAL | BSF_WEAK | BSF_GNU_UNIQUE)) != 0)
 	{
 	  /* If this symbol is marked as occurring now, rather
 	     than at the end, output it now.  This is used for
@@ -3166,6 +3093,43 @@ bfd_generic_define_common_symbol (bfd *output_bfd,
   section->flags |= SEC_ALLOC;
   section->flags &= ~SEC_IS_COMMON;
   return TRUE;
+}
+
+/*
+FUNCTION
+	bfd_generic_define_start_stop
+
+SYNOPSIS
+	struct bfd_link_hash_entry *bfd_generic_define_start_stop
+	  (struct bfd_link_info *info,
+	   const char *symbol, asection *sec);
+
+DESCRIPTION
+	Define a __start, __stop, .startof. or .sizeof. symbol.
+	Return the symbol or NULL if no such undefined symbol exists.
+
+.#define bfd_define_start_stop(output_bfd, info, symbol, sec) \
+.       BFD_SEND (output_bfd, _bfd_define_start_stop, (info, symbol, sec))
+.
+*/
+
+struct bfd_link_hash_entry *
+bfd_generic_define_start_stop (struct bfd_link_info *info,
+			       const char *symbol, asection *sec)
+{
+  struct bfd_link_hash_entry *h;
+
+  h = bfd_link_hash_lookup (info->hash, symbol, FALSE, FALSE, TRUE);
+  if (h != NULL
+      && (h->type == bfd_link_hash_undefined
+	  || h->type == bfd_link_hash_undefweak))
+    {
+      h->type = bfd_link_hash_defined;
+      h->u.def.section = sec;
+      h->u.def.value = 0;
+      return h;
+    }
+  return NULL;
 }
 
 /*

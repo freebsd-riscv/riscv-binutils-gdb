@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2016 Free Software Foundation, Inc.
+# Copyright (C) 2012-2017 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -84,6 +84,9 @@ if { [is_elf_format] } then {
     }
     if {[istarget "arm*-*-*"]} {
 	set target_machine -arm
+    }
+    if {[istarget "arc*-*-*"]} {
+	set target_machine -arc
     }
 
     # The MN10300 and Xtensa ports disable the assembler's call frame
@@ -181,6 +184,7 @@ if { [is_elf_format] } then {
 	run_dump_test "symtab"
     }
     run_dump_test "symver"
+    run_dump_test "pr21661"
 
     # No indirect functions on non-GNU targets.
     # The Visium and MSP set the ELF header's OSABI field to ELFOSABI_STANDALONE.
@@ -209,10 +213,27 @@ if { [is_elf_format] } then {
     run_dump_test "section9"
     run_dump_test "section10"
     run_dump_test "section11"
+    run_dump_test "section12a"
+    run_dump_test "section12b"
+    run_dump_test "section13"
     run_dump_test "dwarf2-1"
     run_dump_test "dwarf2-2"
     run_dump_test "dwarf2-3"
     run_dump_test "dwarf2-4"
+    run_dump_test "dwarf2-5"
+    run_dump_test "dwarf2-6"
+    run_dump_test "dwarf2-7"
+    run_dump_test "dwarf2-8"
+    run_dump_test "dwarf2-9"
+    run_dump_test "dwarf2-10"
+    run_dump_test "dwarf2-11"
+    run_dump_test "dwarf2-12"
+    run_dump_test "dwarf2-13"
+    run_dump_test "dwarf2-14"
+    run_dump_test "dwarf2-15"
+    run_dump_test "dwarf2-16"
+    run_dump_test "dwarf2-17"
+    run_dump_test "dwarf2-18"
     run_dump_test "bss"
     run_dump_test "bad-bss"
     run_dump_test "bad-section-flag"

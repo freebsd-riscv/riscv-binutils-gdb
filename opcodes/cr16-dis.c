@@ -1,5 +1,5 @@
 /* Disassembler code for CR16.
-   Copyright (C) 2007-2016 Free Software Foundation, Inc.
+   Copyright (C) 2007-2017 Free Software Foundation, Inc.
    Contributed by M R Swami Reddy (MR.Swami.Reddy@nsc.com).
 
    This file is part of GAS, GDB and the GNU binutils.
@@ -19,7 +19,7 @@
    Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "sysdep.h"
-#include "dis-asm.h"
+#include "disassemble.h"
 #include "opcode/cr16.h"
 #include "libiberty.h"
 

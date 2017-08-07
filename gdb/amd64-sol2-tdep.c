@@ -1,6 +1,6 @@
 /* Target-dependent code for AMD64 Solaris.
 
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
 
    Contributed by Joseph Myers, CodeSourcery, LLC.
 
@@ -99,7 +99,7 @@ amd64_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->gregset_num_regs = ARRAY_SIZE (amd64_sol2_gregset_reg_offset);
   tdep->sizeof_gregset = 28 * 8;
 
-  amd64_init_abi (info, gdbarch);
+  amd64_init_abi (info, gdbarch, tdesc_amd64);
 
   tdep->sigtramp_p = amd64_sol2_sigtramp_p;
   tdep->sigcontext_addr = amd64_sol2_mcontext_addr;

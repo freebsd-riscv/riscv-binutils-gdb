@@ -1,5 +1,5 @@
 /* BFD back-end for Texas Instruments TMS320C80 Multimedia Video Processor (MVP).
-   Copyright (C) 1996-2016 Free Software Foundation, Inc.
+   Copyright (C) 1996-2017 Free Software Foundation, Inc.
 
    Written by Fred Fish (fnf@cygnus.com)
 
@@ -667,8 +667,8 @@ coff_tic80_relocate_section (bfd *output_bfd,
 	case bfd_reloc_outofrange:
 	  _bfd_error_handler
 	    /* xgettext: c-format */
-	    (_("%B: bad reloc address 0x%lx in section `%A'"),
-	     input_bfd, input_section, (unsigned long) rel->r_vaddr);
+	    (_("%B: bad reloc address %#Lx in section `%A'"),
+	     input_bfd, rel->r_vaddr, input_section);
 	  return FALSE;
 	case bfd_reloc_overflow:
 	  {

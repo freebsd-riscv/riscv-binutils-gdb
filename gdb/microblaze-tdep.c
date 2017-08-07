@@ -1,6 +1,6 @@
 /* Target-dependent code for Xilinx MicroBlaze.
 
-   Copyright (C) 2009-2016 Free Software Foundation, Inc.
+   Copyright (C) 2009-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -134,15 +134,10 @@ microblaze_fetch_instruction (CORE_ADDR pc)
   return extract_unsigned_integer (buf, 4, byte_order);
 }
 
-static const gdb_byte *
-microblaze_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, 
-			       int *len)
-{
-  static gdb_byte break_insn[] = MICROBLAZE_BREAKPOINT;
+constexpr gdb_byte microblaze_break_insn[] = MICROBLAZE_BREAKPOINT;
 
-  *len = sizeof (break_insn);
-  return break_insn;
-}
+typedef BP_MANIPULATION (microblaze_break_insn) microblaze_breakpoint;
+
 
 /* Allocate and initialize a frame cache.  */
 
@@ -708,7 +703,7 @@ microblaze_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     }
 
   /* Allocate space for the new architecture.  */
-  tdep = XNEW (struct gdbarch_tdep);
+  tdep = XCNEW (struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
 
   set_gdbarch_long_double_bit (gdbarch, 128);
@@ -736,11 +731,12 @@ microblaze_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Stack grows downward.  */
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
 
-  set_gdbarch_breakpoint_from_pc (gdbarch, microblaze_breakpoint_from_pc);
+  set_gdbarch_breakpoint_kind_from_pc (gdbarch,
+				       microblaze_breakpoint::kind_from_pc);
+  set_gdbarch_sw_breakpoint_from_kind (gdbarch,
+				       microblaze_breakpoint::bp_from_kind);
 
   set_gdbarch_frame_args_skip (gdbarch, 8);
-
-  set_gdbarch_print_insn (gdbarch, print_insn_microblaze);
 
   set_gdbarch_write_pc (gdbarch, microblaze_write_pc);
 

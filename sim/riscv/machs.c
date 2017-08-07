@@ -57,7 +57,7 @@ static const SIM_MODEL rv32_models[] =
 
 static const SIM_MACH rv32i_mach =
 {
-  "rv32i", "riscv", MACH_RV32I,
+  "rv32i", "riscv:rv32", MACH_RV32I,
   32, 32, &rv32_models[0], &riscv_imp_properties,
   riscv_init_cpu,
   riscv_prepare_run
@@ -79,7 +79,7 @@ static const SIM_MODEL rv64_models[] =
 
 static const SIM_MACH rv64i_mach =
 {
-  "rv64i", "riscv", MACH_RV64I,
+  "rv64i", "riscv:rv64", MACH_RV64I,
   64, 64, &rv64_models[0], &riscv_imp_properties,
   riscv_init_cpu,
   riscv_prepare_run
@@ -101,7 +101,7 @@ static const SIM_MODEL rv128_models[] =
 
 static const SIM_MACH rv128i_mach =
 {
-  "rv128i", "riscv", MACH_RV128I,
+  "rv128i", "riscv:rv128", MACH_RV128I,
   128, 128, &rv128_models[0], &riscv_imp_properties,
   riscv_init_cpu,
   riscv_prepare_run

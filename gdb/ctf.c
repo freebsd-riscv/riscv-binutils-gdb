@@ -1,6 +1,6 @@
 /* CTF format support.
 
-   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+   Copyright (C) 2012-2017 Free Software Foundation, Inc.
    Contributed by Hui Zhu <hui_zhu@mentor.com>
    Contributed by Yao Qi <yao@codesourcery.com>
 
@@ -303,11 +303,6 @@ ctf_target_save (struct trace_file_writer *self,
   /* Don't support save trace file to CTF format in the target.  */
   return 0;
 }
-
-#ifdef USE_WIN32API
-#undef mkdir
-#define mkdir(pathname, mode) mkdir (pathname)
-#endif
 
 /* This is the implementation of trace_file_write_ops method
    start.  It creates the directory DIRNAME, metadata and datastream
@@ -1527,8 +1522,8 @@ ctf_get_traceframe_address (void)
       struct tracepoint *tp
 	= get_tracepoint_by_number_on_target (tpnum);
 
-      if (tp && tp->base.loc)
-	addr = tp->base.loc->address;
+      if (tp && tp->loc)
+	addr = tp->loc->address;
     }
 
   /* Restore the position.  */

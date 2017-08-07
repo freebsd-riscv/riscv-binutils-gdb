@@ -1,5 +1,5 @@
 /* NDS32-specific support for 32-bit ELF.
-   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+   Copyright (C) 2012-2017 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -22,7 +22,7 @@
 #include "sysdep.h"
 #include <stdio.h>
 #include "ansidecl.h"
-#include "dis-asm.h"
+#include "disassemble.h"
 #include "bfd.h"
 #include "symcat.h"
 #include "libiberty.h"
@@ -442,7 +442,7 @@ nds32_parse_opcode (struct nds32_opcode *opc, bfd_vma pc ATTRIBUTE_UNUSED,
 	      else if (op == N32_OP6_JI)
 		{
 		  /* FIXME: Handle relocation.  */
-		  if (info->flags & INSN_HAS_RELOC)
+		  if (info->reloc)
 		    pc = 0;
 		  /* Check if insn32 in ex9 table.  */
 		  if (parse_mode & NDS32_PARSE_EX9IT)

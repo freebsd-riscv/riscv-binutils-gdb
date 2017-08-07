@@ -1,5 +1,5 @@
 /* as.c - GAS main program.
-   Copyright (C) 1987-2016 Free Software Foundation, Inc.
+   Copyright (C) 1987-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -44,12 +44,6 @@
 #include "itbl-ops.h"
 #else
 #define itbl_init()
-#endif
-
-#ifdef HAVE_SBRK
-#ifdef NEED_DECLARATION_SBRK
-extern void *sbrk ();
-#endif
 #endif
 
 #ifdef USING_CGEN
@@ -125,9 +119,6 @@ static struct itbl_file_list *itbl_files;
 #endif
 
 static long start_time;
-#ifdef HAVE_SBRK
-char *start_sbrk;
-#endif
 
 static int flag_macro_alternate;
 
@@ -660,7 +651,7 @@ parse_args (int * pargc, char *** pargv)
 	case OPTION_VERSION:
 	  /* This output is intended to follow the GNU standards document.  */
 	  printf (_("GNU assembler %s\n"), BFD_VERSION_STRING);
-	  printf (_("Copyright (C) 2016 Free Software Foundation, Inc.\n"));
+	  printf (_("Copyright (C) 2017 Free Software Foundation, Inc.\n"));
 	  printf (_("\
 This program is free software; you may redistribute it under the terms of\n\
 the GNU General Public License version 3 or later.\n\
@@ -1043,17 +1034,10 @@ This program has absolutely no warranty.\n"));
 static void
 dump_statistics (void)
 {
-#ifdef HAVE_SBRK
-  char *lim = (char *) sbrk (0);
-#endif
   long run_time = get_run_time () - start_time;
 
   fprintf (stderr, _("%s: total time in assembly: %ld.%06ld\n"),
 	   myname, run_time / 1000000, run_time % 1000000);
-#ifdef HAVE_SBRK
-  fprintf (stderr, _("%s: data size %ld\n"),
-	   myname, (long) (lim - start_sbrk));
-#endif
 
   subsegs_print_statistics (stderr);
   write_print_statistics (stderr);
@@ -1186,9 +1170,7 @@ main (int argc, char ** argv)
   int macro_strip_at;
 
   start_time = get_run_time ();
-#ifdef HAVE_SBRK
-  start_sbrk = (char *) sbrk (0);
-#endif
+  signal_init ();
 
 #if defined (HAVE_SETLOCALE) && defined (HAVE_LC_MESSAGES)
   setlocale (LC_MESSAGES, "");

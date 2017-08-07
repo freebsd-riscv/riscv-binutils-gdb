@@ -1,6 +1,6 @@
 /* Symbol table definitions for GDB.
 
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,10 +20,12 @@
 #if !defined (SYMTAB_H)
 #define SYMTAB_H 1
 
-#include "vec.h"
+#include <vector>
 #include "gdb_vecs.h"
 #include "gdbtypes.h"
 #include "common/enum-flags.h"
+#include "common/function-view.h"
+#include "completer.h"
 
 /* Opaque declarations.  */
 struct ui_file;
@@ -662,8 +664,8 @@ struct symbol_computed_ops
      the caller will generate the right code in the process of
      treating this as an lvalue or rvalue.  */
 
-  void (*tracepoint_var_ref) (struct symbol *symbol, struct gdbarch *gdbarch,
-			      struct agent_expr *ax, struct axs_value *value);
+  void (*tracepoint_var_ref) (struct symbol *symbol, struct agent_expr *ax,
+			      struct axs_value *value);
 
   /* Generate C code to compute the location of SYMBOL.  The C code is
      emitted to STREAM.  GDBARCH is the current architecture and PC is
@@ -674,7 +676,7 @@ struct symbol_computed_ops
      The generated C code must assign the location to a local
      variable; this variable's name is RESULT_NAME.  */
 
-  void (*generate_c_location) (struct symbol *symbol, struct ui_file *stream,
+  void (*generate_c_location) (struct symbol *symbol, string_file &stream,
 			       struct gdbarch *gdbarch,
 			       unsigned char *registers_used,
 			       CORE_ADDR pc, const char *result_name);
@@ -1497,25 +1499,43 @@ extern void forget_cached_source_info (void);
 
 extern void select_source_symtab (struct symtab *);
 
-extern VEC (char_ptr) *default_make_symbol_completion_list_break_on
-  (const char *text, const char *word, const char *break_on,
+/* The reason we're calling into a completion match list collector
+   function.  */
+enum class complete_symbol_mode
+  {
+    /* Completing an expression.  */
+    EXPRESSION,
+
+    /* Completing a linespec.  */
+    LINESPEC,
+  };
+
+extern void default_collect_symbol_completion_matches_break_on
+  (completion_tracker &tracker,
+   complete_symbol_mode mode,
+   const char *text, const char *word, const char *break_on,
    enum type_code code);
-extern VEC (char_ptr) *default_make_symbol_completion_list (const char *,
-							    const char *,
-							    enum type_code);
-extern VEC (char_ptr) *make_symbol_completion_list (const char *, const char *);
-extern VEC (char_ptr) *make_symbol_completion_type (const char *, const char *,
+extern void default_collect_symbol_completion_matches
+  (completion_tracker &tracker,
+   complete_symbol_mode,
+   const char *,
+   const char *,
+   enum type_code);
+extern void collect_symbol_completion_matches (completion_tracker &tracker,
+					       complete_symbol_mode,
+					       const char *, const char *);
+extern void collect_symbol_completion_matches_type (completion_tracker &tracker,
+						    const char *, const char *,
 						    enum type_code);
-extern VEC (char_ptr) *make_symbol_completion_list_fn (struct cmd_list_element *,
-						       const char *,
-						       const char *);
 
-extern VEC (char_ptr) *make_file_symbol_completion_list (const char *,
-							 const char *,
-							 const char *);
+extern void collect_file_symbol_completion_matches (completion_tracker &tracker,
+						    complete_symbol_mode,
+						    const char *,
+						    const char *,
+						    const char *);
 
-extern VEC (char_ptr) *make_source_files_completion_list (const char *,
-							  const char *);
+extern completion_list
+  make_source_files_completion_list (const char *, const char *);
 
 /* symtab.c */
 
@@ -1607,38 +1627,67 @@ int compare_filenames_for_search (const char *filename,
 int compare_glob_filenames_for_search (const char *filename,
 				       const char *search_name);
 
-int iterate_over_some_symtabs (const char *name,
-			       const char *real_path,
-			       int (*callback) (struct symtab *symtab,
-						void *data),
-			       void *data,
-			       struct compunit_symtab *first,
-			       struct compunit_symtab *after_last);
+bool iterate_over_some_symtabs (const char *name,
+				const char *real_path,
+				struct compunit_symtab *first,
+				struct compunit_symtab *after_last,
+				gdb::function_view<bool (symtab *)> callback);
 
 void iterate_over_symtabs (const char *name,
-			   int (*callback) (struct symtab *symtab,
-					    void *data),
-			   void *data);
+			   gdb::function_view<bool (symtab *)> callback);
 
-VEC (CORE_ADDR) *find_pcs_for_symtab_line (struct symtab *symtab, int line,
-					   struct linetable_entry **best_entry);
 
-/* Callback for LA_ITERATE_OVER_SYMBOLS.  The callback will be called
-   once per matching symbol SYM, with DATA being the argument of the
-   same name that was passed to LA_ITERATE_OVER_SYMBOLS.  The callback
-   should return nonzero to indicate that LA_ITERATE_OVER_SYMBOLS
-   should continue iterating, or zero to indicate that the iteration
-   should end.  */
+std::vector<CORE_ADDR> find_pcs_for_symtab_line
+    (struct symtab *symtab, int line, struct linetable_entry **best_entry);
 
-typedef int (symbol_found_callback_ftype) (struct symbol *sym, void *data);
+/* Prototype for callbacks for LA_ITERATE_OVER_SYMBOLS.  The callback
+   is called once per matching symbol SYM.  The callback should return
+   true to indicate that LA_ITERATE_OVER_SYMBOLS should continue
+   iterating, or false to indicate that the iteration should end.  */
+
+typedef bool (symbol_found_callback_ftype) (symbol *sym);
 
 void iterate_over_symbols (const struct block *block, const char *name,
 			   const domain_enum domain,
-			   symbol_found_callback_ftype *callback,
-			   void *data);
+			   gdb::function_view<symbol_found_callback_ftype> callback);
 
-struct cleanup *demangle_for_lookup (const char *name, enum language lang,
-				     const char **result_name);
+/* Storage type used by demangle_for_lookup.  demangle_for_lookup
+   either returns a const char * pointer that points to either of the
+   fields of this type, or a pointer to the input NAME.  This is done
+   this way because the underlying functions that demangle_for_lookup
+   calls either return a std::string (e.g., cp_canonicalize_string) or
+   a malloc'ed buffer (libiberty's demangled), and we want to avoid
+   unnecessary reallocation/string copying.  */
+class demangle_result_storage
+{
+public:
+
+  /* Swap the std::string storage with STR, and return a pointer to
+     the beginning of the new string.  */
+  const char *swap_string (std::string &str)
+  {
+    std::swap (m_string, str);
+    return m_string.c_str ();
+  }
+
+  /* Set the malloc storage to now point at PTR.  Any previous malloc
+     storage is released.  */
+  const char *set_malloc_ptr (char *ptr)
+  {
+    m_malloc.reset (ptr);
+    return ptr;
+  }
+
+private:
+
+  /* The storage.  */
+  std::string m_string;
+  gdb::unique_xmalloc_ptr<char> m_malloc;
+};
+
+const char *
+  demangle_for_lookup (const char *name, enum language lang,
+		       demangle_result_storage &storage);
 
 struct symbol *allocate_symbol (struct objfile *);
 

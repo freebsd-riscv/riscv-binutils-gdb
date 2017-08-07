@@ -1,6 +1,6 @@
 /* Machine independent variables that describe the core file under GDB.
 
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -28,12 +28,6 @@ struct regcache;
 #include "bfd.h"
 #include "exec.h"
 #include "target.h"
-
-/* Return the name of the executable file as a string.
-   ERR nonzero means get error if there is none specified;
-   otherwise return 0 in that case.  */
-
-extern char *get_exec_file (int err);
 
 /* Nonzero if there is a core file.  */
 
@@ -167,7 +161,7 @@ extern void validate_files (void);
 
 extern char *gnutarget;
 
-extern void set_gnutarget (char *);
+extern void set_gnutarget (const char *);
 
 /* Structure to keep track of core register reading functions for
    various core file types.  */
@@ -231,6 +225,51 @@ struct core_fns
     struct core_fns *next;
 
   };
+
+/* Build either a single-thread or multi-threaded section name for
+   PTID.
+
+   If ptid's lwp member is zero, we want to do the single-threaded
+   thing: look for a section named NAME (as passed to the
+   constructor).  If ptid's lwp member is non-zero, we'll want do the
+   multi-threaded thing: look for a section named "NAME/LWP", where
+   LWP is the shortest ASCII decimal representation of ptid's lwp
+   member.  */
+
+class thread_section_name
+{
+public:
+  /* NAME is the single-threaded section name.  If PTID represents an
+     LWP, then the build section name is "NAME/LWP", otherwise it's
+     just "NAME" unmodified.  */
+  thread_section_name (const char *name, ptid_t ptid)
+  {
+    if (ptid.lwp_p ())
+      {
+	m_storage = string_printf ("%s/%ld", name, ptid.lwp ());
+	m_section_name = m_storage.c_str ();
+      }
+    else
+      m_section_name = name;
+  }
+
+  /* Return the computed section name.  The result is valid as long as
+     this thread_section_name object is live.  */
+  const char *c_str () const
+  { return m_section_name; }
+
+  /* Disable copy.  */
+  thread_section_name (const thread_section_name &) = delete;
+  void operator= (const thread_section_name &) = delete;
+
+private:
+  /* Either a pointer into M_STORAGE, or a pointer to the name passed
+     as parameter to the constructor.  */
+  const char *m_section_name;
+  /* If we need to build a new section name, this is where we store
+     it.  */
+  std::string m_storage;
+};
 
 /* NOTE: cagney/2004-04-05: Replaced by "regset.h" and
    regset_from_core_section().  */

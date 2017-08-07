@@ -1,6 +1,6 @@
 /* Block-related functions for the GNU debugger, GDB.
 
-   Copyright (C) 2003-2016 Free Software Foundation, Inc.
+   Copyright (C) 2003-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -239,8 +239,8 @@ call_site_for_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
       /* DW_TAG_gnu_call_site will be missing just if GCC could not determine
 	 the call target.  */
       throw_error (NO_ENTRY_VALUE_ERROR,
-		   _("DW_OP_GNU_entry_value resolving cannot find "
-		     "DW_TAG_GNU_call_site %s in %s"),
+		   _("DW_OP_entry_value resolving cannot find "
+		     "DW_TAG_call_site %s in %s"),
 		   paddress (gdbarch, pc),
 		   (msym.minsym == NULL ? "???"
 		    : MSYMBOL_PRINT_NAME (msym.minsym)));
@@ -589,75 +589,6 @@ block_iterator_next (struct block_iterator *iterator)
   return block_iterator_step (iterator, 0);
 }
 
-/* Perform a single step for a "name" block iterator, iterating across
-   symbol tables as needed.  Returns the next symbol, or NULL when
-   iteration is complete.  */
-
-static struct symbol *
-block_iter_name_step (struct block_iterator *iterator, const char *name,
-		      int first)
-{
-  struct symbol *sym;
-
-  gdb_assert (iterator->which != FIRST_LOCAL_BLOCK);
-
-  while (1)
-    {
-      if (first)
-	{
-	  struct compunit_symtab *cust
-	    = find_iterator_compunit_symtab (iterator);
-	  const struct block *block;
-
-	  /* Iteration is complete.  */
-	  if (cust == NULL)
-	    return  NULL;
-
-	  block = BLOCKVECTOR_BLOCK (COMPUNIT_BLOCKVECTOR (cust),
-				     iterator->which);
-	  sym = dict_iter_name_first (BLOCK_DICT (block), name,
-				      &iterator->dict_iter);
-	}
-      else
-	sym = dict_iter_name_next (name, &iterator->dict_iter);
-
-      if (sym != NULL)
-	return sym;
-
-      /* We have finished iterating the appropriate block of one
-	 symtab.  Now advance to the next symtab and begin iteration
-	 there.  */
-      ++iterator->idx;
-      first = 1;
-    }
-}
-
-/* See block.h.  */
-
-struct symbol *
-block_iter_name_first (const struct block *block,
-		       const char *name,
-		       struct block_iterator *iterator)
-{
-  initialize_block_iterator (block, iterator);
-
-  if (iterator->which == FIRST_LOCAL_BLOCK)
-    return dict_iter_name_first (block->dict, name, &iterator->dict_iter);
-
-  return block_iter_name_step (iterator, name, 1);
-}
-
-/* See block.h.  */
-
-struct symbol *
-block_iter_name_next (const char *name, struct block_iterator *iterator)
-{
-  if (iterator->which == FIRST_LOCAL_BLOCK)
-    return dict_iter_name_next (name, &iterator->dict_iter);
-
-  return block_iter_name_step (iterator, name, 0);
-}
-
 /* Perform a single step for a "match" block iterator, iterating
    across symbol tables as needed.  Returns the next symbol, or NULL
    when iteration is complete.  */
@@ -812,9 +743,9 @@ block_lookup_symbol_primary (const struct block *block, const char *name,
 	      || BLOCK_SUPERBLOCK (BLOCK_SUPERBLOCK (block)) == NULL);
 
   other = NULL;
-  for (sym = dict_iter_name_first (block->dict, name, &dict_iter);
+  for (sym = dict_iter_match_first (block->dict, name, strcmp_iw, &dict_iter);
        sym != NULL;
-       sym = dict_iter_name_next (name, &dict_iter))
+       sym = dict_iter_match_next (name, strcmp_iw, &dict_iter))
     {
       if (SYMBOL_DOMAIN (sym) == domain)
 	return sym;

@@ -1,5 +1,5 @@
 /* Routines to link ECOFF debugging information.
-   Copyright (C) 1993-2016 Free Software Foundation, Inc.
+   Copyright (C) 1993-2017 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support, <ian@cygnus.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -898,7 +898,7 @@ bfd_ecoff_debug_accumulate (void * handle,
       if (! bfd_link_relocatable (info))
 	{
 
-	  /* When are are hashing strings, we lie about the number of
+	  /* When we are hashing strings, we lie about the number of
 	     strings attached to each FDR.  We need to set cbSs
 	     because some versions of dbx apparently use it to decide
 	     how much of the string table to read in.  */

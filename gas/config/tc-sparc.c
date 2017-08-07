@@ -1,5 +1,5 @@
 /* tc-sparc.c -- Assemble for the SPARC
-   Copyright (C) 1989-2016 Free Software Foundation, Inc.
+   Copyright (C) 1989-2017 Free Software Foundation, Inc.
    This file is part of GAS, the GNU Assembler.
 
    GAS is free software; you can redistribute it and/or modify
@@ -36,6 +36,7 @@
 #define U0x80000000 ((((unsigned long) 1 << 16) << 15))
 
 static int sparc_ip (char *, const struct sparc_opcode **);
+static int parse_sparc_asi (char **, const sparc_asi **);
 static int parse_keyword_arg (int (*) (const char *), char **, int *);
 static int parse_const_expr_arg (char **, int *);
 static int get_expression (char *);
@@ -226,25 +227,6 @@ static void output_insn (const struct sparc_opcode *, struct sparc_it *);
 enum sparc_arch_types {v6, v7, v8, leon, sparclet, sparclite, sparc86x, v8plus,
 		       v8plusa, v9, v9a, v9b, v9_64};
 
-/* Hardware capability sets, used to keep sparc_arch_table easy to
-   read.  */
-#define HWS_V8 HWCAP_MUL32 | HWCAP_DIV32 | HWCAP_FSMULD
-#define HWS_V9 HWS_V8 | HWCAP_POPC
-#define HWS_VA HWS_V9 | HWCAP_VIS
-#define HWS_VB HWS_VA | HWCAP_VIS2
-#define HWS_VC HWS_VB | HWCAP_ASI_BLK_INIT
-#define HWS_VD HWS_VC | HWCAP_FMAF | HWCAP_VIS3 | HWCAP_HPC
-#define HWS_VE HWS_VD                                                   \
-  | HWCAP_AES | HWCAP_DES | HWCAP_KASUMI | HWCAP_CAMELLIA               \
-  | HWCAP_MD5 | HWCAP_SHA1 | HWCAP_SHA256 |HWCAP_SHA512 | HWCAP_MPMUL   \
-  | HWCAP_MONT | HWCAP_CRC32C | HWCAP_CBCOND | HWCAP_PAUSE
-#define HWS_VV HWS_VE | HWCAP_FJFMAU | HWCAP_IMA
-#define HWS_VM HWS_VV
-
-#define HWS2_VM							\
-  HWCAP2_VIS3B | HWCAP2_ADP | HWCAP2_SPARC5 | HWCAP2_MWAIT	\
-  | HWCAP2_XMPMUL | HWCAP2_XMONT
-
 static struct sparc_arch {
   const char *name;
   const char *opcode_arch;
@@ -254,50 +236,56 @@ static struct sparc_arch {
   int default_arch_size;
   /* Allowable arg to -A?  */
   int user_option_p;
+  /* Extra hardware capabilities allowed.  These are added to the
+     hardware capabilities associated with the opcode
+     architecture.  */
   int hwcap_allowed;
   int hwcap2_allowed;
 } sparc_arch_table[] = {
   { "v6",         "v6",  v6,  0, 1, 0, 0 },
   { "v7",         "v7",  v7,  0, 1, 0, 0 },
-  { "v8",         "v8",  v8, 32, 1, HWS_V8, 0 },
-  { "v8a",        "v8",  v8, 32, 1, HWS_V8, 0 },
-  { "sparc",      "v9",  v9,  0, 1, HWCAP_V8PLUS|HWS_V9, 0 },
-  { "sparcvis",   "v9a", v9,  0, 1, HWS_VA, 0 },
-  { "sparcvis2",  "v9b", v9,  0, 1, HWS_VB, 0 },
-  { "sparcfmaf",  "v9b", v9,  0, 1, HWS_VB|HWCAP_FMAF, 0 },
-  { "sparcima",   "v9b", v9,  0, 1, HWS_VB|HWCAP_FMAF|HWCAP_IMA, 0 },
-  { "sparcvis3",  "v9b", v9,  0, 1, HWS_VB|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC, 0 },
-  { "sparcvis3r", "v9b", v9,  0, 1, HWS_VB|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC|HWCAP_FJFMAU, 0 },
+  { "v8",         "v8",  v8, 32, 1, 0, 0 },
+  { "v8a",        "v8",  v8, 32, 1, 0, 0 },
+  { "sparc",      "v9",  v9,  0, 1, HWCAP_V8PLUS, 0 },
+  { "sparcvis",   "v9a", v9,  0, 1, 0, 0 },
+  { "sparcvis2",  "v9b", v9,  0, 1, 0, 0 },
+  { "sparcfmaf",  "v9b", v9,  0, 1, HWCAP_FMAF, 0 },
+  { "sparcima",   "v9b", v9,  0, 1, HWCAP_FMAF|HWCAP_IMA, 0 },
+  { "sparcvis3",  "v9b", v9,  0, 1, HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC, 0 },
+  { "sparcvis3r", "v9b", v9,  0, 1, HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC|HWCAP_FJFMAU, 0 },
 
-  { "sparc4",     "v9v", v9,  0, 1, HWS_VV, 0 },
-  { "sparc5",     "v9m", v9,  0, 1, HWS_VM, HWS2_VM },
+  { "sparc4",     "v9v", v9,  0, 1, 0, 0 },
+  { "sparc5",     "v9m", v9,  0, 1, 0, 0 },
+  { "sparc6",     "m8",  v9,  0, 1, 0, 0 },
 
-  { "leon",      "leon",      leon,      32, 1, HWS_V8, 0 },
-  { "sparclet",  "sparclet",  sparclet,  32, 1, HWS_V8, 0 },
-  { "sparclite", "sparclite", sparclite, 32, 1, HWS_V8, 0 },
-  { "sparc86x",  "sparclite", sparc86x,  32, 1, HWS_V8, 0 },
+  { "leon",      "leon",      leon,      32, 1, 0, 0 },
+  { "sparclet",  "sparclet",  sparclet,  32, 1, 0, 0 },
+  { "sparclite", "sparclite", sparclite, 32, 1, 0, 0 },
+  { "sparc86x",  "sparclite", sparc86x,  32, 1, 0, 0 },
 
-  { "v8plus",  "v9",  v9,  0, 1, HWCAP_V8PLUS|HWS_V9, 0 },
-  { "v8plusa", "v9a", v9,  0, 1, HWCAP_V8PLUS|HWS_VA, 0 },
-  { "v8plusb", "v9b", v9,  0, 1, HWCAP_V8PLUS|HWS_VB, 0 },
-  { "v8plusc", "v9c", v9,  0, 1, HWCAP_V8PLUS|HWS_VC, 0 },
-  { "v8plusd", "v9d", v9,  0, 1, HWCAP_V8PLUS|HWS_VD, 0 },
-  { "v8pluse", "v9e", v9,  0, 1, HWCAP_V8PLUS|HWS_VE, 0 },
-  { "v8plusv", "v9v", v9,  0, 1, HWCAP_V8PLUS|HWS_VV, 0 },
-  { "v8plusm", "v9m", v9,  0, 1, HWCAP_V8PLUS|HWS_VM, 0 },
-
-  { "v9",      "v9",  v9,  0, 1, HWS_V9, 0 },
-  { "v9a",     "v9a", v9,  0, 1, HWS_VA, 0 },
-  { "v9b",     "v9b", v9,  0, 1, HWS_VB, 0 },
-  { "v9c",     "v9c", v9,  0, 1, HWS_VC, 0 },
-  { "v9d",     "v9d", v9,  0, 1, HWS_VD, 0 },
-  { "v9e",     "v9e", v9,  0, 1, HWS_VE, 0 },
-  { "v9v",     "v9v", v9,  0, 1, HWS_VV, 0 },
-  { "v9m",     "v9m", v9,  0, 1, HWS_VM, HWS2_VM },
+  { "v8plus",  "v9",  v9,  0, 1, HWCAP_V8PLUS, 0 },
+  { "v8plusa", "v9a", v9,  0, 1, HWCAP_V8PLUS, 0 },
+  { "v8plusb", "v9b", v9,  0, 1, HWCAP_V8PLUS, 0 },
+  { "v8plusc", "v9c", v9,  0, 1, HWCAP_V8PLUS, 0 },
+  { "v8plusd", "v9d", v9,  0, 1, HWCAP_V8PLUS, 0 },
+  { "v8pluse", "v9e", v9,  0, 1, HWCAP_V8PLUS, 0 },
+  { "v8plusv", "v9v", v9,  0, 1, HWCAP_V8PLUS, 0 },
+  { "v8plusm", "v9m", v9,  0, 1, HWCAP_V8PLUS, 0 },
+  { "v8plusm8", "m8", v9,  0, 1, HWCAP_V8PLUS, 0 },
+  
+  { "v9",      "v9",  v9,  0, 1, 0, 0 },
+  { "v9a",     "v9a", v9,  0, 1, 0, 0 },
+  { "v9b",     "v9b", v9,  0, 1, 0, 0 },
+  { "v9c",     "v9c", v9,  0, 1, 0, 0 },
+  { "v9d",     "v9d", v9,  0, 1, 0, 0 },
+  { "v9e",     "v9e", v9,  0, 1, 0, 0 },
+  { "v9v",     "v9v", v9,  0, 1, 0, 0 },
+  { "v9m",     "v9m", v9,  0, 1, 0, 0 },
+  { "v9m8",     "m8", v9,  0, 1, 0, 0 },
 
   /* This exists to allow configure.tgt to pass one
      value to specify both the default machine and default word size.  */
-  { "v9-64",   "v9",  v9, 64, 0, HWS_V9, 0 },
+  { "v9-64",   "v9",  v9, 64, 0, 0, 0 },
   { NULL, NULL, v8, 0, 0, 0, 0 }
 };
 
@@ -551,8 +539,16 @@ md_parse_option (int c, const char *arg)
 	if (!architecture_requested
 	    || opcode_arch > max_architecture)
 	  max_architecture = opcode_arch;
-	hwcap_allowed
-          |= (((bfd_uint64_t) sa->hwcap2_allowed) << 32) | sa->hwcap_allowed;
+
+        /* The allowed hardware capabilities are the implied by the
+           opcodes arch plus any extra capabilities defined in the GAS
+           arch.  */
+        hwcap_allowed
+          = (hwcap_allowed
+             | (((bfd_uint64_t) sparc_opcode_archs[opcode_arch].hwcaps2) << 32)
+             | (((bfd_uint64_t) sa->hwcap2_allowed) << 32)
+             | sparc_opcode_archs[opcode_arch].hwcaps
+             | sa->hwcap_allowed);
 	architecture_requested = 1;
       }
       break;
@@ -1138,7 +1134,7 @@ md_begin (void)
 	p->pop = &pop_table[i];
       }
 
-    /* Last entry is the centinel.  */
+    /* Last entry is the sentinel.  */
     perc_table[entry].type = perc_entry_none;
 
     qsort (perc_table, sizeof (perc_table) / sizeof (perc_table[0]),
@@ -1167,6 +1163,7 @@ sparc_md_end (void)
       case SPARC_OPCODE_ARCH_V9E: mach = bfd_mach_sparc_v9e; break;
       case SPARC_OPCODE_ARCH_V9V: mach = bfd_mach_sparc_v9v; break;
       case SPARC_OPCODE_ARCH_V9M: mach = bfd_mach_sparc_v9m; break;
+      case SPARC_OPCODE_ARCH_M8:  mach = bfd_mach_sparc_v9m8; break;
       default: mach = bfd_mach_sparc_v9; break;
       }
   else
@@ -1181,6 +1178,7 @@ sparc_md_end (void)
       case SPARC_OPCODE_ARCH_V9E: mach = bfd_mach_sparc_v8pluse; break;
       case SPARC_OPCODE_ARCH_V9V: mach = bfd_mach_sparc_v8plusv; break;
       case SPARC_OPCODE_ARCH_V9M: mach = bfd_mach_sparc_v8plusm; break;
+      case SPARC_OPCODE_ARCH_M8:  mach = bfd_mach_sparc_v8plusm8; break;
       /* The sparclite is treated like a normal sparc.  Perhaps it shouldn't
 	 be but for now it is (since that's the way it's always been
 	 treated).  */
@@ -1271,7 +1269,7 @@ BSR (bfd_vma val, int amount)
 static char *expr_end;
 
 /* Values for `special_case'.
-   Instructions that require wierd handling because they're longer than
+   Instructions that require weird handling because they're longer than
    4 bytes.  */
 #define SPECIAL_CASE_NONE	0
 #define	SPECIAL_CASE_SET	1
@@ -1751,6 +1749,22 @@ get_hwcap_name (bfd_uint64_t mask)
     return "xmont";
   if (mask & HWCAP2_NSEC)
     return "nsec";
+  if (mask & HWCAP2_SPARC6)
+    return "sparc6";
+  if (mask & HWCAP2_ONADDSUB)
+    return "onaddsub";
+  if (mask & HWCAP2_ONMUL)
+    return "onmul";
+  if (mask & HWCAP2_ONDIV)
+    return "ondiv";
+  if (mask & HWCAP2_DICTUNP)
+    return "dictunp";
+  if (mask & HWCAP2_FPCMPSHL)
+    return "fpcmpshl";
+  if (mask & HWCAP2_RLE)
+    return "rle";
+  if (mask & HWCAP2_SHA3)
+    return "sha3";
 
   return "UNKNOWN";
 }
@@ -1772,6 +1786,7 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
   int comma = 0;
   int v9_arg_p;
   int special_case = SPECIAL_CASE_NONE;
+  const sparc_asi *sasi = NULL;
 
   s = str;
   if (ISLOWER (*s))
@@ -2538,10 +2553,13 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 	    case 'e':		/* next operand is a floating point register */
 	    case 'v':
 	    case 'V':
+            case ';':
 
 	    case 'f':
 	    case 'B':
 	    case 'R':
+            case ':':
+            case '\'':
 
 	    case '4':
 	    case '5':
@@ -2550,6 +2568,7 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 	    case 'H':
 	    case 'J':
 	    case '}':
+            case '^':
 	      {
 		char format;
 
@@ -2568,6 +2587,7 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 			 || *args == 'B'
 			 || *args == '5'
 			 || *args == 'H'
+                         || *args == '\''
 			 || format == 'd')
 			&& (mask & 1))
 		      {
@@ -2584,6 +2604,21 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
                         /* register must be multiple of 4 */
 			break;
 		      }
+
+                    if ((*args == ':'
+                         || *args == ';'
+                         || *args == '^')
+                        && (mask & 7))
+                      {
+                        /* register must be multiple of 8 */
+                        break;
+                      }
+
+                    if (*args == '\'' && mask < 48)
+                      {
+                        /* register must be higher or equal than %f48 */
+                        break;
+                      }
 
 		    if (mask >= 64)
 		      {
@@ -2630,15 +2665,21 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 		  case 'v':
 		  case 'V':
 		  case 'e':
+                  case ';':
 		    opcode |= RS1 (mask);
 		    continue;
 
 		  case 'f':
 		  case 'B':
 		  case 'R':
+                  case ':':
 		    opcode |= RS2 (mask);
 		    continue;
 
+                  case '\'':
+                    opcode |= RS2 (mask & 0xe);
+                    continue;
+                    
 		  case '4':
 		  case '5':
 		    opcode |= RS3 (mask);
@@ -2648,6 +2689,7 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 		  case 'H':
 		  case 'J':
 		  case '}':
+                  case '^':
 		    opcode |= RD (mask);
 		    continue;
 		  }		/* Pack it in.  */
@@ -2945,17 +2987,18 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 		     handle the R_SPARC_5 immediate directly here so that
 		     we don't need to add support for multiple relocations
 		     in one instruction just yet.  */
-		  if (the_insn.reloc == BFD_RELOC_SPARC_5)
+		  if (the_insn.reloc == BFD_RELOC_SPARC_5
+                      && ((insn->match & OP(0x3)) == 0))
 		    {
 		      valueT val = the_insn.exp.X_add_number;
 
+		      the_insn.reloc = BFD_RELOC_NONE;
 		      if (! in_bitfield_range (val, 0x1f))
 			{
 			  error_message = _(": Immediate value in cbcond is out of range.");
 			  goto error;
 			}
 		      opcode |= val & 0x1f;
-		      the_insn.reloc = BFD_RELOC_NONE;
 		    }
 		}
 
@@ -2976,11 +3019,12 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 		/* Parse an asi.  */
 		if (*s == '#')
 		  {
-		    if (! parse_keyword_arg (sparc_encode_asi, &s, &asi))
+		    if (! parse_sparc_asi (&s, &sasi))
 		      {
 			error_message = _(": invalid ASI name");
 			goto error;
 		      }
+		    asi = sasi->value;
 		  }
 		else
 		  {
@@ -3065,6 +3109,12 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 	      s += 7;
 	      continue;
 
+            case '&':
+              if (strncmp (s, "%entropy", 8) != 0)
+                break;
+              s += 8;
+              continue;
+
 	    case 'E':
 	      if (strncmp (s, "%ccr", 4) != 0)
 		break;
@@ -3083,6 +3133,26 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 	      s += 4;
 	      continue;
 
+            case '|':
+              {
+                int imm2 = 0;
+
+                /* Parse a 2-bit immediate.  */
+                if (! parse_const_expr_arg (&s, &imm2))
+                  {
+                    error_message = _(": non-immdiate imm2 operand");
+                    goto error;
+                  }
+                if ((imm2 & ~0x3) != 0)
+                  {
+                    error_message = _(": imm2 immediate operand out of range (0-3)");
+                    goto error;
+                  }
+
+                opcode |= ((imm2 & 0x2) << 3) | (imm2 & 0x1);
+                continue;
+              }
+              
 	    case 'x':
 	      {
 		char *push = input_line_pointer;
@@ -3154,8 +3224,18 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
       else
 	{
 	  /* We have a match.  Now see if the architecture is OK.  */
+	  /* String to use in case of architecture warning.  */
+	  const char *msg_str = str;
 	  int needed_arch_mask = insn->architecture;
-	  bfd_uint64_t hwcaps
+
+          /* Include the ASI architecture needed as well */
+          if (sasi && needed_arch_mask > sasi->architecture)
+            {
+              needed_arch_mask = sasi->architecture;
+              msg_str = sasi->name;
+            }
+
+          bfd_uint64_t hwcaps
 	    = (((bfd_uint64_t) insn->hwcaps2) << 32) | insn->hwcaps;
 
 #if defined(OBJ_ELF) && !defined(TE_SOLARIS)
@@ -3190,11 +3270,15 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 		  as_warn (_("architecture bumped from \"%s\" to \"%s\" on \"%s\""),
 			   sparc_opcode_archs[current_architecture].name,
 			   sparc_opcode_archs[needed_architecture].name,
-			   str);
+			   msg_str);
 		  warn_after_architecture = needed_architecture;
 		}
 	      current_architecture = needed_architecture;
-	      hwcap_allowed |= hwcaps;
+	      hwcap_allowed
+                = (hwcap_allowed
+                   | hwcaps
+                   | (((bfd_uint64_t) sparc_opcode_archs[current_architecture].hwcaps2) << 32)
+                   | sparc_opcode_archs[current_architecture].hwcaps);
 	    }
 	  /* Conflict.  */
 	  /* ??? This seems to be a bit fragile.  What if the next entry in
@@ -3225,7 +3309,7 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 		}
 
 	      as_bad (_("Architecture mismatch on \"%s %s\"."), str, argsStart);
-	      as_tsktsk (_(" (Requires %s; requested architecture is %s.)"),
+	      as_tsktsk (_("(Requires %s; requested architecture is %s.)"),
 			 required_archs,
 			 sparc_opcode_archs[max_architecture].name);
 	      return special_case;
@@ -3250,6 +3334,35 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
   return special_case;
 }
 
+static char *
+skip_over_keyword (char *q)
+{
+  for (q = q + (*q == '#' || *q == '%');
+       ISALNUM (*q) || *q == '_';
+       ++q)
+    continue;
+  return q;
+}
+
+static int
+parse_sparc_asi (char **input_pointer_p, const sparc_asi **value_p)
+{
+  const sparc_asi *value;
+  char c, *p, *q;
+
+  p = *input_pointer_p;
+  q = skip_over_keyword(p);
+  c = *q;
+  *q = 0;
+  value = sparc_encode_asi (p);
+  *q = c;
+  if (value == NULL)
+    return 0;
+  *value_p = value;
+  *input_pointer_p = q;
+  return 1;
+}
+
 /* Parse an argument that can be expressed as a keyword.
    (eg: #StoreStore or %ccfr).
    The result is a boolean indicating success.
@@ -3264,10 +3377,7 @@ parse_keyword_arg (int (*lookup_fn) (const char *),
   char c, *p, *q;
 
   p = *input_pointerP;
-  for (q = p + (*p == '#' || *p == '%');
-       ISALNUM (*q) || *q == '_';
-       ++q)
-    continue;
+  q = skip_over_keyword(p);
   c = *q;
   *q = 0;
   value = (*lookup_fn) (p);
@@ -3548,8 +3658,13 @@ md_apply_fix (fixS *fixP, valueT *valP, segT segment ATTRIBUTE_UNUSED)
 
 	  insn |= val & 0x3fffffff;
 
-	  /* See if we have a delay slot.  */
-	  if (sparc_relax && fixP->fx_where + 8 <= fixP->fx_frag->fr_fix)
+	  /* See if we have a delay slot.  In that case we attempt to
+             optimize several cases transforming CALL instructions
+             into branches.  But we can only do that if the relocation
+             can be completely resolved here, i.e. if no undefined
+             symbol is associated with it.  */
+	  if (sparc_relax && fixP->fx_addsy == NULL
+	      && fixP->fx_where + 8 <= fixP->fx_frag->fr_fix)
 	    {
 #define G0		0
 #define O7		15
@@ -4957,7 +5072,10 @@ cons_fix_new_sparc (fragS *frag,
 	  case 8: r = BFD_RELOC_SPARC_TLS_DTPOFF64; break;
 	  }
     }
-  else if (sparc_no_align_cons)
+  else if (sparc_no_align_cons
+	   || /* PR 20803 - relocs in the .eh_frame section
+		 need to support unaligned access.  */
+	   strcmp (now_seg->name, ".eh_frame") == 0)
     {
       switch (nbytes)
 	{

@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2016 Free Software Foundation, Inc.
+/* Copyright (C) 2009-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -56,6 +56,7 @@ amd64_windows_passed_by_integer_register (struct type *type)
       case TYPE_CODE_CHAR:
       case TYPE_CODE_PTR:
       case TYPE_CODE_REF:
+      case TYPE_CODE_RVALUE_REF:
       case TYPE_CODE_STRUCT:
       case TYPE_CODE_UNION:
 	return (TYPE_LENGTH (type) == 1
@@ -1223,7 +1224,7 @@ amd64_windows_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   */
   frame_unwind_append_unwinder (gdbarch, &amd64_windows_frame_unwind);
 
-  amd64_init_abi (info, gdbarch);
+  amd64_init_abi (info, gdbarch, tdesc_amd64);
 
   windows_init_abi (info, gdbarch);
 

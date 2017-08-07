@@ -1,5 +1,5 @@
 /* Target operations for the remote server for GDB.
-   Copyright (C) 2002-2016 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -386,4 +386,31 @@ default_breakpoint_kind_from_pc (CORE_ADDR *pcptr)
 
   (*the_target->sw_breakpoint_from_kind) (0, &size);
   return size;
+}
+
+/* See target/target.h.  */
+
+void
+target_terminal_init ()
+{
+  /* Placeholder needed because of fork_inferior.  Not necessary on
+     GDBserver.  */
+}
+
+/* See target/target.h.  */
+
+void
+target_terminal_inferior ()
+{
+  /* Placeholder needed because of fork_inferior.  Not necessary on
+     GDBserver.  */
+}
+
+/* See target/target.h.  */
+
+void
+target_terminal_ours ()
+{
+  /* Placeholder needed because of fork_inferior.  Not necessary on
+     GDBserver.  */
 }

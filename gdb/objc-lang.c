@@ -1,6 +1,6 @@
 /* Objective-C language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 2002-2016 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
    Written by Michael Snyder.
@@ -81,7 +81,7 @@ static const struct objfile_data *objc_objfile_data;
    suitably defined.  */
 
 struct symbol *
-lookup_struct_typedef (char *name, const struct block *block, int noerr)
+lookup_struct_typedef (const char *name, const struct block *block, int noerr)
 {
   struct symbol *sym;
 
@@ -106,7 +106,7 @@ lookup_struct_typedef (char *name, const struct block *block, int noerr)
 }
 
 CORE_ADDR 
-lookup_objc_class (struct gdbarch *gdbarch, char *classname)
+lookup_objc_class (struct gdbarch *gdbarch, const char *classname)
 {
   struct type *char_type = builtin_type (gdbarch)->builtin_char;
   struct value * function, *classval;
@@ -135,7 +135,7 @@ lookup_objc_class (struct gdbarch *gdbarch, char *classname)
 }
 
 CORE_ADDR
-lookup_child_selector (struct gdbarch *gdbarch, char *selname)
+lookup_child_selector (struct gdbarch *gdbarch, const char *selname)
 {
   struct type *char_type = builtin_type (gdbarch)->builtin_char;
   struct value * function, *selstring;
@@ -364,7 +364,7 @@ static const char *objc_extensions[] =
   ".m", NULL
 };
 
-const struct language_defn objc_language_defn = {
+extern const struct language_defn objc_language_defn = {
   "objective-c",		/* Language name */
   "Objective-C",
   language_objc,
@@ -397,11 +397,12 @@ const struct language_defn objc_language_defn = {
   1,				/* C-style arrays */
   0,				/* String lower bound */
   default_word_break_characters,
-  default_make_symbol_completion_list,
+  default_collect_symbol_completion_matches,
   c_language_arch_info,
   default_print_array_index,
   default_pass_by_reference,
   default_get_string,
+  c_watch_location_expression,
   NULL,				/* la_get_symbol_name_cmp */
   iterate_over_symbols,
   &default_varobj_ops,
@@ -1193,14 +1194,11 @@ print_object_command (char *args, int from_tty)
 "The 'print-object' command requires an argument (an Objective-C object)");
 
   {
-    struct expression *expr = parse_expression (args);
-    struct cleanup *old_chain = 
-      make_cleanup (free_current_contents, &expr);
+    expression_up expr = parse_expression (args);
     int pc = 0;
 
     object = evaluate_subexp (builtin_type (expr->gdbarch)->builtin_data_ptr,
-			      expr, &pc, EVAL_NORMAL);
-    do_cleanups (old_chain);
+			      expr.get (), &pc, EVAL_NORMAL);
   }
 
   /* Validate the address for sanity.  */
@@ -1236,7 +1234,7 @@ print_object_command (char *args, int from_tty)
  */
 
 struct objc_methcall {
-  char *name;
+  const char *name;
  /* Return instance method to be called.  */
   int (*stop_at) (CORE_ADDR, CORE_ADDR *);
   /* Start of pc range corresponding to method invocation.  */
@@ -1379,7 +1377,6 @@ extern initialize_file_ftype _initialize_objc_language;
 void
 _initialize_objc_language (void)
 {
-  add_language (&objc_language_defn);
   add_info ("selectors", selectors_info,    /* INFO SELECTORS command.  */
 	    _("All Objective-C selectors, or those matching REGEXP."));
   add_info ("classes", classes_info, 	    /* INFO CLASSES   command.  */

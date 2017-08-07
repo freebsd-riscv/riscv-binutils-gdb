@@ -1,6 +1,6 @@
 /* Interface between GDB and target environments, including files and processes
 
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by John Gilmore.
 
@@ -72,6 +72,7 @@ struct inferior;
 #include "vec.h"
 #include "gdb_signals.h"
 #include "btrace.h"
+#include "record.h"
 #include "command.h"
 
 #include "break-common.h" /* For enum target_hw_bp_type.  */
@@ -590,7 +591,8 @@ struct target_ops
        ENV is the environment vector to pass.  Errors reported with error().
        On VxWorks and various standalone systems, we ignore exec_file.  */
     void (*to_create_inferior) (struct target_ops *, 
-				char *, char *, char **, int);
+				const char *, const std::string &,
+				char **, int);
     void (*to_post_startup_inferior) (struct target_ops *, ptid_t)
       TARGET_DEFAULT_IGNORE ();
     int (*to_insert_fork_catchpoint) (struct target_ops *, int)
@@ -638,9 +640,9 @@ struct target_ops
       TARGET_DEFAULT_RETURN (0);
     void (*to_update_thread_list) (struct target_ops *)
       TARGET_DEFAULT_IGNORE ();
-    char *(*to_pid_to_str) (struct target_ops *, ptid_t)
+    const char *(*to_pid_to_str) (struct target_ops *, ptid_t)
       TARGET_DEFAULT_FUNC (default_pid_to_str);
-    char *(*to_extra_thread_info) (struct target_ops *, struct thread_info *)
+    const char *(*to_extra_thread_info) (struct target_ops *, struct thread_info *)
       TARGET_DEFAULT_RETURN (NULL);
     const char *(*to_thread_name) (struct target_ops *, struct thread_info *)
       TARGET_DEFAULT_RETURN (NULL);
@@ -710,22 +712,25 @@ struct target_ops
 					      CORE_ADDR offset)
       TARGET_DEFAULT_NORETURN (generic_tls_error ());
 
-    /* Request that OPS transfer up to LEN 8-bit bytes of the target's
-       OBJECT.  The OFFSET, for a seekable object, specifies the
+    /* Request that OPS transfer up to LEN addressable units of the target's
+       OBJECT.  When reading from a memory object, the size of an addressable
+       unit is architecture dependent and can be found using
+       gdbarch_addressable_memory_unit_size.  Otherwise, an addressable unit is
+       1 byte long.  The OFFSET, for a seekable object, specifies the
        starting point.  The ANNEX can be used to provide additional
        data-specific information to the target.
 
        Return the transferred status, error or OK (an
-       'enum target_xfer_status' value).  Save the number of bytes
+       'enum target_xfer_status' value).  Save the number of addressable units
        actually transferred in *XFERED_LEN if transfer is successful
-       (TARGET_XFER_OK) or the number unavailable bytes if the requested
+       (TARGET_XFER_OK) or the number unavailable units if the requested
        data is unavailable (TARGET_XFER_UNAVAILABLE).  *XFERED_LEN
        smaller than LEN does not indicate the end of the object, only
        the end of the transfer; higher level code should continue
        transferring if desired.  This is handled in target.c.
 
        The interface does not support a "retry" mechanism.  Instead it
-       assumes that at least one byte will be transfered on each
+       assumes that at least one addressable unit will be transfered on each
        successful call.
 
        NOTE: cagney/2003-10-17: The current interface can lead to
@@ -1149,6 +1154,10 @@ struct target_ops
 						   const struct btrace_target_info *)
       TARGET_DEFAULT_RETURN (NULL);
 
+    /* Current recording method.  */
+    enum record_method (*to_record_method) (struct target_ops *, ptid_t ptid)
+      TARGET_DEFAULT_RETURN (RECORD_METHOD_NONE);
+
     /* Stop trace recording.  */
     void (*to_stop_recording) (struct target_ops *)
       TARGET_DEFAULT_IGNORE ();
@@ -1451,6 +1460,9 @@ extern int target_write_raw_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
    is returned.  */
 VEC(mem_region_s) *target_memory_map (void);
 
+/* Erases all flash memory regions on the target.  */
+void flash_erase_command (char *cmd, int from_tty);
+
 /* Erase the specified flash region.  */
 void target_flash_erase (ULONGEST address, LONGEST length);
 
@@ -1529,16 +1541,8 @@ extern int target_terminal_is_inferior (void);
 
 extern int target_terminal_is_ours (void);
 
-/* Initialize the terminal settings we record for the inferior,
-   before we actually run the inferior.  */
-
-extern void target_terminal_init (void);
-
-/* Put the inferior's terminal settings into effect.  This is
-   preparation for starting or resuming the inferior.  This is a no-op
-   unless called with the main UI as current UI.  */
-
-extern void target_terminal_inferior (void);
+/* For target_terminal_init, target_terminal_inferior and
+   target_terminal_ours, see target/target.h.  */
 
 /* Put some of our terminal settings into effect, enough to get proper
    results from our output, but do not change into or out of RAW mode
@@ -1547,12 +1551,6 @@ extern void target_terminal_inferior (void);
    UI as current UI.  */
 
 extern void target_terminal_ours_for_output (void);
-
-/* Put our terminal settings into effect.  First record the inferior's
-   terminal settings so they can be restored properly later.  This is
-   a no-op unless called with the main UI as current UI.  */
-
-extern void target_terminal_ours (void);
 
 /* Return true if the target stack has a non-default
   "to_terminal_ours" method.  */
@@ -1843,9 +1841,9 @@ extern int target_is_non_stop_p (void);
    `process xyz', but on some systems it may contain
    `process xyz thread abc'.  */
 
-extern char *target_pid_to_str (ptid_t ptid);
+extern const char *target_pid_to_str (ptid_t ptid);
 
-extern char *normal_pid_to_str (ptid_t ptid);
+extern const char *normal_pid_to_str (ptid_t ptid);
 
 /* Return a short string describing extra information about PID,
    e.g. "sleeping", "runnable", "running on LWP 3".  Null return value
@@ -2316,7 +2314,8 @@ extern void complete_target_initialization (struct target_ops *t);
 /* Adds a command ALIAS for target T and marks it deprecated.  This is useful
    for maintaining backwards compatibility when renaming targets.  */
 
-extern void add_deprecated_target_alias (struct target_ops *t, char *alias);
+extern void add_deprecated_target_alias (struct target_ops *t,
+					 const char *alias);
 
 extern void push_target (struct target_ops *);
 
@@ -2491,6 +2490,9 @@ extern int target_supports_delete_record (void);
 
 /* See to_delete_record in struct target_ops.  */
 extern void target_delete_record (void);
+
+/* See to_record_method.  */
+extern enum record_method target_record_method (ptid_t ptid);
 
 /* See to_record_is_replaying in struct target_ops.  */
 extern int target_record_is_replaying (ptid_t ptid);

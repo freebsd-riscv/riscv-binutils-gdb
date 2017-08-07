@@ -1,6 +1,6 @@
 /* GDB CLI commands.
 
-   Copyright (C) 2000-2016 Free Software Foundation, Inc.
+   Copyright (C) 2000-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -82,7 +82,7 @@ static void show_user (char *, int);
 
 static void make_command (char *, int);
 
-static void shell_escape (char *, int);
+static void shell_escape (const char *, int);
 
 static void edit_command (char *, int);
 
@@ -238,15 +238,14 @@ help_command (char *command, int from_tty)
   help_cmd (command, gdb_stdout);
 }
 
+
 /* Note: The "complete" command is used by Emacs to implement completion.
    [Is that why this function writes output with *_unfiltered?]  */
 
 static void
-complete_command (char *arg, int from_tty)
+complete_command (char *arg_entry, int from_tty)
 {
-  int argpoint;
-  char *point, *arg_prefix;
-  VEC (char_ptr) *completions;
+  const char *arg = arg_entry;
 
   dont_repeat ();
 
@@ -254,7 +253,7 @@ complete_command (char *arg, int from_tty)
     {
       /* Only print this for non-mi frontends.  An MI frontend may not
 	 be able to handle this.  */
-      if (!ui_out_is_mi_like_p (current_uiout))
+      if (!current_uiout->is_mi_like_p ())
 	{
 	  printf_unfiltered (_("max-completions is zero,"
 			       " completion is disabled.\n"));
@@ -264,57 +263,66 @@ complete_command (char *arg, int from_tty)
 
   if (arg == NULL)
     arg = "";
-  argpoint = strlen (arg);
 
-  /* complete_line assumes that its first argument is somewhere
-     within, and except for filenames at the beginning of, the word to
-     be completed.  The following crude imitation of readline's
-     word-breaking tries to accomodate this.  */
-  point = arg + argpoint;
-  while (point > arg)
+  completion_tracker tracker_handle_brkchars;
+  completion_tracker tracker_handle_completions;
+  completion_tracker *tracker;
+
+  int quote_char = '\0';
+  const char *word;
+
+  TRY
     {
-      if (strchr (rl_completer_word_break_characters, point[-1]) != 0)
-        break;
-      point--;
+      word = completion_find_completion_word (tracker_handle_brkchars,
+					      arg, &quote_char);
+
+      /* Completers that provide a custom word point in the
+	 handle_brkchars phase also compute their completions then.
+	 Completers that leave the completion word handling to readline
+	 must be called twice.  */
+      if (tracker_handle_brkchars.use_custom_word_point ())
+	tracker = &tracker_handle_brkchars;
+      else
+	{
+	  complete_line (tracker_handle_completions, word, arg, strlen (arg));
+	  tracker = &tracker_handle_completions;
+	}
+    }
+  CATCH (ex, RETURN_MASK_ALL)
+    {
+      return;
     }
 
-  arg_prefix = (char *) alloca (point - arg + 1);
-  memcpy (arg_prefix, arg, point - arg);
-  arg_prefix[point - arg] = 0;
+  std::string arg_prefix (arg, word - arg);
 
-  completions = complete_line (point, arg, argpoint);
+  completion_result result
+    = tracker->build_completion_result (word, word - arg, strlen (arg));
 
-  if (completions)
+  if (result.number_matches != 0)
     {
-      int ix, size = VEC_length (char_ptr, completions);
-      char *item, *prev = NULL;
-
-      qsort (VEC_address (char_ptr, completions), size,
-	     sizeof (char *), compare_strings);
-
-      /* We do extra processing here since we only want to print each
-	 unique item once.  */
-      for (ix = 0; VEC_iterate (char_ptr, completions, ix, item); ++ix)
+      if (result.number_matches == 1)
+	printf_unfiltered ("%s%s\n", arg_prefix.c_str (), result.match_list[0]);
+      else
 	{
-	  if (prev == NULL || strcmp (item, prev) != 0)
+	  result.sort_match_list ();
+
+	  for (size_t i = 0; i < result.number_matches; i++)
 	    {
-	      printf_unfiltered ("%s%s\n", arg_prefix, item);
-	      xfree (prev);
-	      prev = item;
+	      printf_unfiltered ("%s%s",
+				 arg_prefix.c_str (),
+				 result.match_list[i + 1]);
+	      if (quote_char)
+		printf_unfiltered ("%c", quote_char);
+	      printf_unfiltered ("\n");
 	    }
-	  else
-	    xfree (item);
 	}
 
-      xfree (prev);
-      VEC_free (char_ptr, completions);
-
-      if (size == max_completions)
+      if (result.number_matches == max_completions)
 	{
-	  /* ARG_PREFIX and POINT are included in the output so that emacs
+	  /* ARG_PREFIX and WORD are included in the output so that emacs
 	     will include the message in the output.  */
 	  printf_unfiltered (_("%s%s %s\n"),
-			     arg_prefix, point,
+			     arg_prefix.c_str (), word,
 			     get_max_completions_reached_message ());
 	}
     }
@@ -392,10 +400,7 @@ cd_command (char *dir, int from_tty)
      repeat might be useful but is more likely to be a mistake.  */
   dont_repeat ();
 
-  if (dir == 0)
-    dir = "~";
-
-  dir = tilde_expand (dir);
+  dir = tilde_expand (dir != NULL ? dir : "~");
   cleanup = make_cleanup (xfree, dir);
 
   if (chdir (dir) < 0)
@@ -735,7 +740,7 @@ echo_command (char *text, int from_tty)
 }
 
 static void
-shell_escape (char *arg, int from_tty)
+shell_escape (const char *arg, int from_tty)
 {
 #if defined(CANT_FORK) || \
       (!defined(HAVE_WORKING_VFORK) && !defined(HAVE_WORKING_FORK))
@@ -795,13 +800,21 @@ shell_escape (char *arg, int from_tty)
 #endif /* Can fork.  */
 }
 
+/* Implementation of the "shell" command.  */
+
+static void
+shell_command (char *arg, int from_tty)
+{
+  shell_escape (arg, from_tty);
+}
+
 static void
 edit_command (char *arg, int from_tty)
 {
   struct symtabs_and_lines sals;
   struct symtab_and_line sal;
   struct symbol *sym;
-  char *editor;
+  const char *editor;
   char *p;
   const char *fn;
 
@@ -822,28 +835,25 @@ edit_command (char *arg, int from_tty)
     }
   else
     {
-      struct cleanup *cleanup;
-      struct event_location *location;
       char *arg1;
 
       /* Now should only be one argument -- decode it in SAL.  */
       arg1 = arg;
-      location = string_to_event_location (&arg1, current_language);
-      cleanup = make_cleanup_delete_event_location (location);
-      sals = decode_line_1 (location, DECODE_LINE_LIST_MODE, NULL, NULL, 0);
+      event_location_up location = string_to_event_location (&arg1,
+							     current_language);
+      sals = decode_line_1 (location.get (), DECODE_LINE_LIST_MODE,
+			    NULL, NULL, 0);
 
       filter_sals (&sals);
       if (! sals.nelts)
 	{
 	  /*  C++  */
-	  do_cleanups (cleanup);
 	  return;
 	}
       if (sals.nelts > 1)
 	{
 	  ambiguous_line_spec (&sals);
 	  xfree (sals.sals);
-	  do_cleanups (cleanup);
 	  return;
 	}
 
@@ -885,7 +895,6 @@ edit_command (char *arg, int from_tty)
 
       if (sal.symtab == 0)
         error (_("No line number known for %s."), arg);
-      do_cleanups (cleanup);
     }
 
   if ((editor = (char *) getenv ("EDITOR")) == NULL)
@@ -914,9 +923,6 @@ list_command (char *arg, int from_tty)
   int dummy_beg = 0;
   int linenum_beg = 0;
   char *p;
-  struct cleanup *cleanup;
-
-  cleanup = make_cleanup (null_cleanup, NULL);
 
   /* Pull in the current default source line if necessary.  */
   if (arg == NULL || ((arg[0] == '+' || arg[0] == '-') && arg[1] == '\0'))
@@ -979,24 +985,21 @@ list_command (char *arg, int from_tty)
     dummy_beg = 1;
   else
     {
-      struct event_location *location;
-
-      location = string_to_event_location (&arg1, current_language);
-      make_cleanup_delete_event_location (location);
-      sals = decode_line_1 (location, DECODE_LINE_LIST_MODE, NULL, NULL, 0);
+      event_location_up location = string_to_event_location (&arg1,
+							     current_language);
+      sals = decode_line_1 (location.get (), DECODE_LINE_LIST_MODE,
+			    NULL, NULL, 0);
 
       filter_sals (&sals);
       if (!sals.nelts)
 	{
 	  /*  C++  */
-	  do_cleanups (cleanup);
 	  return;
 	}
       if (sals.nelts > 1)
 	{
 	  ambiguous_line_spec (&sals);
 	  xfree (sals.sals);
-	  do_cleanups (cleanup);
 	  return;
 	}
 
@@ -1021,28 +1024,22 @@ list_command (char *arg, int from_tty)
 	dummy_end = 1;
       else
 	{
-	  struct event_location *location;
-
-	  location = string_to_event_location (&arg1, current_language);
-	  make_cleanup_delete_event_location (location);
+	  event_location_up location
+	    = string_to_event_location (&arg1, current_language);
 	  if (dummy_beg)
-	    sals_end = decode_line_1 (location,
+	    sals_end = decode_line_1 (location.get (),
 				      DECODE_LINE_LIST_MODE, NULL, NULL, 0);
 	  else
-	    sals_end = decode_line_1 (location, DECODE_LINE_LIST_MODE,
+	    sals_end = decode_line_1 (location.get (), DECODE_LINE_LIST_MODE,
 				      NULL, sal.symtab, sal.line);
 
 	  filter_sals (&sals_end);
 	  if (sals_end.nelts == 0)
-	    {
-	      do_cleanups (cleanup);
-	      return;
-	    }
+	    return;
 	  if (sals_end.nelts > 1)
 	    {
 	      ambiguous_line_spec (&sals_end);
 	      xfree (sals_end.sals);
-	      do_cleanups (cleanup);
 	      return;
 	    }
 	  sal_end = sals_end.sals[0];
@@ -1123,7 +1120,6 @@ list_command (char *arg, int from_tty)
 			 ? sal.line + get_lines_to_list ()
 			 : sal_end.line + 1),
 			0);
-  do_cleanups (cleanup);
 }
 
 /* Subroutine of disassemble_command to simplify it.
@@ -1148,7 +1144,7 @@ print_disassembly (struct gdbarch *gdbarch, const char *name,
 			 paddress (gdbarch, low), paddress (gdbarch, high));
 
       /* Dump the specified range.  */
-      gdb_disassembly (gdbarch, current_uiout, 0, flags, -1, low, high);
+      gdb_disassembly (gdbarch, current_uiout, flags, -1, low, high);
 
       printf_filtered ("End of assembler dump.\n");
       gdb_flush (gdb_stdout);
@@ -1306,18 +1302,14 @@ disassemble_command (char *arg, int from_tty)
 static void
 make_command (char *arg, int from_tty)
 {
-  char *p;
-
   if (arg == 0)
-    p = "make";
+    shell_escape ("make", from_tty);
   else
     {
-      p = (char *) xmalloc (sizeof ("make ") + strlen (arg));
-      strcpy (p, "make ");
-      strcpy (p + sizeof ("make ") - 1, arg);
-    }
+      std::string cmd = std::string ("make ") + arg;
 
-  shell_escape (p, from_tty);
+      shell_escape (cmd.c_str (), from_tty);
+    }
 }
 
 static void
@@ -1351,28 +1343,13 @@ show_user (char *args, int from_tty)
 static void 
 apropos_command (char *searchstr, int from_tty)
 {
-  regex_t pattern;
-  int code;
-
   if (searchstr == NULL)
     error (_("REGEXP string is empty"));
 
-  code = regcomp (&pattern, searchstr, REG_ICASE);
-  if (code == 0)
-    {
-      struct cleanup *cleanups;
+  compiled_regex pattern (searchstr, REG_ICASE,
+			  _("Error in regular expression"));
 
-      cleanups = make_regfree_cleanup (&pattern);
-      apropos_cmd (gdb_stdout, cmdlist, &pattern, "");
-      do_cleanups (cleanups);
-    }
-  else
-    {
-      char *err = get_regcomp_error (code, &pattern);
-
-      make_cleanup (xfree, err);
-      error (_("Error in regular expression: %s"), err);
-    }
+  apropos_cmd (gdb_stdout, cmdlist, pattern, "");
 }
 
 /* Subroutine of alias_command to simplify it.
@@ -1881,7 +1858,7 @@ from the target."),
 		  _("Generic command for showing gdb debugging flags"),
 		  &showdebuglist, "show debug ", 0, &showlist);
 
-  c = add_com ("shell", class_support, shell_escape, _("\
+  c = add_com ("shell", class_support, shell_command, _("\
 Execute the rest of the line as a shell command.\n\
 With no arguments, run an inferior shell."));
   set_cmd_completer (c, filename_completer);

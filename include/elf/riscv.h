@@ -1,5 +1,5 @@
 /* RISC-V ELF support for BFD.
-   Copyright 2011-2016 Free Software Foundation, Inc.
+   Copyright (C) 2011-2017 Free Software Foundation, Inc.
 
    Contributed by Andrew Waterman (andrew@sifive.com).
    Based on MIPS ELF support for BFD, by Ian Lance Taylor.
@@ -79,6 +79,15 @@ START_RELOC_NUMBERS (elf_riscv_reloc_type)
   RELOC_NUMBER (R_RISCV_RVC_LUI, 46)
   RELOC_NUMBER (R_RISCV_GPREL_I, 47)
   RELOC_NUMBER (R_RISCV_GPREL_S, 48)
+  RELOC_NUMBER (R_RISCV_TPREL_I, 49)
+  RELOC_NUMBER (R_RISCV_TPREL_S, 50)
+  RELOC_NUMBER (R_RISCV_RELAX, 51)
+  RELOC_NUMBER (R_RISCV_SUB6, 52)
+  RELOC_NUMBER (R_RISCV_SET6, 53)
+  RELOC_NUMBER (R_RISCV_SET8, 54)
+  RELOC_NUMBER (R_RISCV_SET16, 55)
+  RELOC_NUMBER (R_RISCV_SET32, 56)
+  RELOC_NUMBER (R_RISCV_32_PCREL, 57)
 END_RELOC_NUMBERS (R_RISCV_max)
 
 /* Processor specific flags for the ELF header e_flags field.  */
@@ -100,5 +109,8 @@ END_RELOC_NUMBERS (R_RISCV_max)
 
 /* File uses the quad-float ABI.  */
 #define EF_RISCV_FLOAT_ABI_QUAD 0x0006
+
+/* The name of the global pointer symbol.  */
+#define RISCV_GP_SYMBOL "__global_pointer$"
 
 #endif /* _ELF_RISCV_H */

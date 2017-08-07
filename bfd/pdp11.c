@@ -1,5 +1,5 @@
 /* BFD back-end for PDP-11 a.out binaries.
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -1149,8 +1149,8 @@ NAME (aout, set_section_contents) (bfd *abfd,
     {
       _bfd_error_handler
 	/* xgettext:c-format */
-	(_("%s: can not represent section `%s' in a.out object file format"),
-	 bfd_get_filename (abfd), bfd_get_section_name (abfd, section));
+	(_("%B: can not represent section `%A' in a.out object file format"),
+	 abfd, section);
       bfd_set_error (bfd_error_nonrepresentable_section);
       return FALSE;
     }
@@ -3705,9 +3705,8 @@ NAME (aout, final_link) (bfd *abfd,
 		 by the reloc size.  */
 	      _bfd_error_handler
 		/* xgettext:c-format */
-		(_("%s: relocatable link from %s to %s not supported"),
-		 bfd_get_filename (abfd),
-		 sub->xvec->name, abfd->xvec->name);
+		(_("%B: relocatable link from %s to %s not supported"),
+		 abfd, sub->xvec->name, abfd->xvec->name);
 	      bfd_set_error (bfd_error_invalid_operation);
 	      goto error_return;
 	    }

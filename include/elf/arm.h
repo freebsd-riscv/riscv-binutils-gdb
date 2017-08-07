@@ -1,5 +1,5 @@
 /* ARM ELF support for BFD.
-   Copyright (C) 1998-2016 Free Software Foundation, Inc.
+   Copyright (C) 1998-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -106,6 +106,7 @@
 #define TAG_CPU_ARCH_V6S_M	12
 #define TAG_CPU_ARCH_V7E_M	13
 #define TAG_CPU_ARCH_V8		14
+#define TAG_CPU_ARCH_V8R	15
 #define TAG_CPU_ARCH_V8M_BASE	16
 #define TAG_CPU_ARCH_V8M_MAIN	17
 #define MAX_TAG_CPU_ARCH	TAG_CPU_ARCH_V8M_MAIN

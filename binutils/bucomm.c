@@ -1,5 +1,5 @@
 /* bucomm.c -- Bin Utils COMmon code.
-   Copyright (C) 1991-2016 Free Software Foundation, Inc.
+   Copyright (C) 1991-2017 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -587,6 +587,9 @@ get_file_size (const char * file_name)
 {
   struct stat statbuf;
 
+  if (file_name == NULL)
+    return (off_t) -1;
+
   if (stat (file_name, &statbuf) < 0)
     {
       if (errno == ENOENT)
@@ -595,6 +598,8 @@ get_file_size (const char * file_name)
 	non_fatal (_("Warning: could not locate '%s'.  reason: %s"),
 		   file_name, strerror (errno));
     }
+  else if (S_ISDIR (statbuf.st_mode))
+    non_fatal (_("Warning: '%s' is a directory"), file_name);
   else if (! S_ISREG (statbuf.st_mode))
     non_fatal (_("Warning: '%s' is not an ordinary file"), file_name);
   else if (statbuf.st_size < 0)

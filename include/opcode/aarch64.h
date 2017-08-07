@@ -1,6 +1,6 @@
 /* AArch64 assembler/disassembler support.
 
-   Copyright (C) 2009-2016 Free Software Foundation, Inc.
+   Copyright (C) 2009-2017 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GNU Binutils.
@@ -39,6 +39,7 @@ typedef uint32_t aarch64_insn;
 /* The following bitmasks control CPU features.  */
 #define AARCH64_FEATURE_V8	0x00000001	/* All processors.  */
 #define AARCH64_FEATURE_V8_2	0x00000020      /* ARMv8.2 processors.  */
+#define AARCH64_FEATURE_V8_3	0x00000040      /* ARMv8.3 processors.  */
 #define AARCH64_FEATURE_CRYPTO	0x00010000	/* Crypto instructions.  */
 #define AARCH64_FEATURE_FP	0x00020000	/* FP instructions.  */
 #define AARCH64_FEATURE_SIMD	0x00040000	/* SIMD instructions.  */
@@ -52,32 +53,29 @@ typedef uint32_t aarch64_insn;
 #define AARCH64_FEATURE_RAS	0x04000000	/* RAS Extensions.  */
 #define AARCH64_FEATURE_PROFILE	0x08000000	/* Statistical Profiling.  */
 #define AARCH64_FEATURE_SVE	0x10000000	/* SVE instructions.  */
+#define AARCH64_FEATURE_RCPC	0x20000000	/* RCPC instructions.  */
+#define AARCH64_FEATURE_COMPNUM	0x40000000	/* Complex # instructions.  */
+#define AARCH64_FEATURE_DOTPROD 0x080000000     /* Dot Product instructions.  */
 
 /* Architectures are the sum of the base and extensions.  */
 #define AARCH64_ARCH_V8		AARCH64_FEATURE (AARCH64_FEATURE_V8, \
 						 AARCH64_FEATURE_FP  \
 						 | AARCH64_FEATURE_SIMD)
-#define AARCH64_ARCH_V8_1	AARCH64_FEATURE (AARCH64_FEATURE_V8, \
-						 AARCH64_FEATURE_FP  \
-						 | AARCH64_FEATURE_SIMD	\
-						 | AARCH64_FEATURE_CRC	\
+#define AARCH64_ARCH_V8_1	AARCH64_FEATURE (AARCH64_ARCH_V8, \
+						 AARCH64_FEATURE_CRC	\
 						 | AARCH64_FEATURE_V8_1 \
 						 | AARCH64_FEATURE_LSE	\
 						 | AARCH64_FEATURE_PAN	\
 						 | AARCH64_FEATURE_LOR	\
 						 | AARCH64_FEATURE_RDMA)
-#define AARCH64_ARCH_V8_2	AARCH64_FEATURE (AARCH64_FEATURE_V8,	\
+#define AARCH64_ARCH_V8_2	AARCH64_FEATURE (AARCH64_ARCH_V8_1,	\
 						 AARCH64_FEATURE_V8_2	\
 						 | AARCH64_FEATURE_F16	\
-						 | AARCH64_FEATURE_RAS	\
-						 | AARCH64_FEATURE_FP	\
-						 | AARCH64_FEATURE_SIMD	\
-						 | AARCH64_FEATURE_CRC	\
-						 | AARCH64_FEATURE_V8_1 \
-						 | AARCH64_FEATURE_LSE	\
-						 | AARCH64_FEATURE_PAN	\
-						 | AARCH64_FEATURE_LOR	\
-						 | AARCH64_FEATURE_RDMA)
+						 | AARCH64_FEATURE_RAS)
+#define AARCH64_ARCH_V8_3	AARCH64_FEATURE (AARCH64_ARCH_V8_2,	\
+						 AARCH64_FEATURE_V8_3	\
+						 | AARCH64_FEATURE_RCPC	\
+						 | AARCH64_FEATURE_COMPNUM)
 
 #define AARCH64_ARCH_NONE	AARCH64_FEATURE (0, 0)
 #define AARCH64_ANY		AARCH64_FEATURE (-1, 0)	/* Any basic core.  */
@@ -120,7 +118,6 @@ enum aarch64_operand_class
   AARCH64_OPND_CLASS_SIMD_ELEMENT,
   AARCH64_OPND_CLASS_SISD_REG,
   AARCH64_OPND_CLASS_SIMD_REGLIST,
-  AARCH64_OPND_CLASS_CP_REG,
   AARCH64_OPND_CLASS_SVE_REG,
   AARCH64_OPND_CLASS_PRED_REG,
   AARCH64_OPND_CLASS_ADDRESS,
@@ -147,6 +144,7 @@ enum aarch64_opnd
 
   AARCH64_OPND_Rd_SP,	/* Integer Rd or SP.  */
   AARCH64_OPND_Rn_SP,	/* Integer Rn or SP.  */
+  AARCH64_OPND_Rm_SP,	/* Integer Rm or SP.  */
   AARCH64_OPND_PAIRREG,	/* Paired register operand.  */
   AARCH64_OPND_Rm_EXT,	/* Integer Rm extended.  */
   AARCH64_OPND_Rm_SFT,	/* Integer Rm shifted.  */
@@ -176,8 +174,8 @@ enum aarch64_opnd
 			   structure to all lanes.  */
   AARCH64_OPND_LEt,	/* AdvSIMD Vector Element list.  */
 
-  AARCH64_OPND_Cn,	/* Co-processor register in CRn field.  */
-  AARCH64_OPND_Cm,	/* Co-processor register in CRm field.  */
+  AARCH64_OPND_CRn,	/* Co-processor register in CRn field.  */
+  AARCH64_OPND_CRm,	/* Co-processor register in CRm field.  */
 
   AARCH64_OPND_IDX,	/* AdvSIMD EXT index operand.  */
   AARCH64_OPND_IMM_VLSL,/* Immediate for shifting vector registers left.  */
@@ -210,6 +208,9 @@ enum aarch64_opnd
   AARCH64_OPND_HALF,	/* #<imm16>{, LSL #<shift>} operand in move wide.  */
   AARCH64_OPND_FBITS,	/* FP #<fbits> operand in e.g. SCVTF */
   AARCH64_OPND_IMM_MOV,	/* Immediate operand for the MOV alias.  */
+  AARCH64_OPND_IMM_ROT1,	/* Immediate rotate operand for FCMLA.  */
+  AARCH64_OPND_IMM_ROT2,	/* Immediate rotate operand for indexed FCMLA.  */
+  AARCH64_OPND_IMM_ROT3,	/* Immediate rotate operand for FCADD.  */
 
   AARCH64_OPND_COND,	/* Standard condition as the last operand.  */
   AARCH64_OPND_COND1,	/* Same as the above, but excluding AL and NV.  */
@@ -231,6 +232,7 @@ enum aarch64_opnd
 				   friendly feature of using LDR/STR as the
 				   the mnemonic name for LDUR/STUR instructions
 				   wherever there is no ambiguity.  */
+  AARCH64_OPND_ADDR_SIMM10,	/* Address of signed 10-bit immediate.  */
   AARCH64_OPND_ADDR_UIMM12,	/* Address of unsigned 12-bit immediate.  */
   AARCH64_OPND_SIMD_ADDR_SIMPLE,/* Address of ld/st multiple structures.  */
   AARCH64_OPND_SIMD_ADDR_POST,	/* Address of ld/st multiple post-indexed.  */
@@ -246,6 +248,7 @@ enum aarch64_opnd
   AARCH64_OPND_PRFOP,		/* Prefetch operation.  */
   AARCH64_OPND_BARRIER_PSB,	/* Barrier operand for PSB.  */
 
+  AARCH64_OPND_SVE_ADDR_RI_S4x16,   /* SVE [<Xn|SP>, #<simm4>*16].  */
   AARCH64_OPND_SVE_ADDR_RI_S4xVL,   /* SVE [<Xn|SP>, #<simm4>, MUL VL].  */
   AARCH64_OPND_SVE_ADDR_RI_S4x2xVL, /* SVE [<Xn|SP>, #<simm4>*2, MUL VL].  */
   AARCH64_OPND_SVE_ADDR_RI_S4x3xVL, /* SVE [<Xn|SP>, #<simm4>*3, MUL VL].  */
@@ -297,6 +300,8 @@ enum aarch64_opnd
   AARCH64_OPND_SVE_I1_HALF_ONE,	/* SVE choice between 0.5 and 1.0.  */
   AARCH64_OPND_SVE_I1_HALF_TWO,	/* SVE choice between 0.5 and 2.0.  */
   AARCH64_OPND_SVE_I1_ZERO_ONE,	/* SVE choice between 0.0 and 1.0.  */
+  AARCH64_OPND_SVE_IMM_ROT1,	/* SVE 1-bit rotate operand (90 or 270).  */
+  AARCH64_OPND_SVE_IMM_ROT2,	/* SVE 2-bit rotate operand (N*90).  */
   AARCH64_OPND_SVE_INV_LIMM,	/* SVE inverted logical immediate.  */
   AARCH64_OPND_SVE_LIMM,	/* SVE logical immediate.  */
   AARCH64_OPND_SVE_LIMM_MOV,	/* SVE logical immediate for MOV.  */
@@ -334,6 +339,9 @@ enum aarch64_opnd
   AARCH64_OPND_SVE_Zd,		/* SVE vector register in Zd.  */
   AARCH64_OPND_SVE_Zm_5,	/* SVE vector register in Zm, bits [9,5].  */
   AARCH64_OPND_SVE_Zm_16,	/* SVE vector register in Zm, bits [20,16].  */
+  AARCH64_OPND_SVE_Zm3_INDEX,	/* z0-z7[0-3] in Zm, bits [20,16].  */
+  AARCH64_OPND_SVE_Zm3_22_INDEX, /* z0-z7[0-7] in Zm3_INDEX plus bit 22.  */
+  AARCH64_OPND_SVE_Zm4_INDEX,	/* z0-z15[0-1] in Zm, bits [20,16].  */
   AARCH64_OPND_SVE_Zn,		/* SVE vector register in Zn.  */
   AARCH64_OPND_SVE_Zn_INDEX,	/* Indexed SVE vector register, for DUP.  */
   AARCH64_OPND_SVE_ZnxN,	/* SVE vector register list in Zn.  */
@@ -396,6 +404,7 @@ enum aarch64_opnd_qualifier
   AARCH64_OPND_QLF_P_M,
 
   /* Constraint on value.  */
+  AARCH64_OPND_QLF_CR,		/* CRn, CRm. */
   AARCH64_OPND_QLF_imm_0_7,
   AARCH64_OPND_QLF_imm_0_15,
   AARCH64_OPND_QLF_imm_0_31,
@@ -471,6 +480,7 @@ enum aarch64_insn_class
   ldst_immpost,
   ldst_immpre,
   ldst_imm9,	/* immpost or immpre */
+  ldst_imm10,	/* LDRAA/LDRAB */
   ldst_pos,
   ldst_regoff,
   ldst_unpriv,
@@ -499,6 +509,7 @@ enum aarch64_insn_class
   sve_size_hsd,
   sve_size_sd,
   testbranch,
+  dotproduct,
 };
 
 /* Opcode enumerators.  */
@@ -599,6 +610,8 @@ enum aarch64_op
   OP_MOVZ_P_P_P,
   OP_NOTS_P_P_P_Z,
   OP_NOT_P_P_P_Z,
+
+  OP_FCMLA_ELEM,	/* ARMv8.3, indexed element version.  */
 
   OP_TOTAL_NUM,		/* Pseudo.  */
 };

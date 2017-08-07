@@ -1,6 +1,6 @@
 /* Target-dependent code for the Motorola 88000 series.
 
-   Copyright (C) 2004-2016 Free Software Foundation, Inc.
+   Copyright (C) 2004-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -49,7 +49,7 @@ m88k_fetch_instruction (CORE_ADDR pc, enum bfd_endian byte_order)
 static const char *
 m88k_register_name (struct gdbarch *gdbarch, int regnum)
 {
-  static char *register_names[] =
+  static const char *register_names[] =
   {
     "r0",  "r1",  "r2",  "r3",  "r4",  "r5",  "r6",  "r7",
     "r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",
@@ -97,16 +97,11 @@ m88k_addr_bits_remove (struct gdbarch *gdbarch, CORE_ADDR addr)
    encode a breakpoint instruction, store the length of the string in
    *LEN and optionally adjust *PC to point to the correct memory
    location for inserting the breakpoint.  */
-   
-static const gdb_byte *
-m88k_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
-{
-  /* tb 0,r0,511 */
-  static gdb_byte break_insn[] = { 0xf0, 0x00, 0xd1, 0xff };
 
-  *len = sizeof (break_insn);
-  return break_insn;
-}
+/* tb 0,r0,511 */
+constexpr gdb_byte m88k_break_insn[] = { 0xf0, 0x00, 0xd1, 0xff };
+
+typedef BP_MANIPULATION (m88k_break_insn) m88k_breakpoint;
 
 static CORE_ADDR
 m88k_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
@@ -166,6 +161,7 @@ m88k_integral_or_pointer_p (const struct type *type)
       return 1;
     case TYPE_CODE_PTR:
     case TYPE_CODE_REF:
+    case TYPE_CODE_RVALUE_REF:
       {
 	/* Allow only 32-bit pointers.  */
 	return (TYPE_LENGTH (type) == 4);
@@ -842,8 +838,6 @@ m88k_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_iterate_over_regset_sections
     (gdbarch, m88k_iterate_over_regset_sections);
 
-  set_gdbarch_print_insn (gdbarch, print_insn_m88k);
-
   set_gdbarch_skip_prologue (gdbarch, m88k_skip_prologue);
 
   /* Stack grows downward.  */
@@ -857,7 +851,8 @@ m88k_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_return_value (gdbarch, m88k_return_value);
 
   set_gdbarch_addr_bits_remove (gdbarch, m88k_addr_bits_remove);
-  set_gdbarch_breakpoint_from_pc (gdbarch, m88k_breakpoint_from_pc);
+  set_gdbarch_breakpoint_kind_from_pc (gdbarch, m88k_breakpoint::kind_from_pc);
+  set_gdbarch_sw_breakpoint_from_kind (gdbarch, m88k_breakpoint::bp_from_kind);
   set_gdbarch_unwind_pc (gdbarch, m88k_unwind_pc);
   set_gdbarch_write_pc (gdbarch, m88k_write_pc);
 

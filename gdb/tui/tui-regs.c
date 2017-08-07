@@ -1,6 +1,6 @@
 /* TUI display registers in window.
 
-   Copyright (C) 1998-2016 Free Software Foundation, Inc.
+   Copyright (C) 1998-2017 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -668,24 +668,23 @@ tui_reg_command (char *args, int from_tty)
 /* Complete names of register groups, and add the special "prev" and "next"
    names.  */
 
-static VEC (char_ptr) *
+static void
 tui_reggroup_completer (struct cmd_list_element *ignore,
+			completion_tracker &tracker,
 			const char *text, const char *word)
 {
-  VEC (char_ptr) *result = NULL;
   static const char *extra[] = { "next", "prev", NULL };
   size_t len = strlen (word);
   const char **tmp;
 
-  result = reggroup_completer (ignore, text, word);
+  reggroup_completer (ignore, tracker, text, word);
 
+  /* XXXX use complete_on_enum instead?  */
   for (tmp = extra; *tmp != NULL; ++tmp)
     {
       if (strncmp (word, *tmp, len) == 0)
-	VEC_safe_push (char_ptr, result, xstrdup (*tmp));
+	tracker.add_completion (gdb::unique_xmalloc_ptr<char> (xstrdup (*tmp)));
     }
-
-  return result;
 }
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */
@@ -711,7 +710,6 @@ TUI command to control the register window."), tuicmd);
 static void
 tui_restore_gdbout (void *ui)
 {
-  ui_file_delete (gdb_stdout);
   gdb_stdout = (struct ui_file*) ui;
   pagination_enabled = 1;
 }
@@ -723,29 +721,26 @@ static char *
 tui_register_format (struct frame_info *frame, int regnum)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  struct ui_file *stream;
   struct ui_file *old_stdout;
   struct cleanup *cleanups;
   char *p, *s;
   char *ret;
 
+  string_file stream;
+
   pagination_enabled = 0;
   old_stdout = gdb_stdout;
-  stream = tui_sfileopen (256);
-  gdb_stdout = stream;
+  gdb_stdout = &stream;
   cleanups = make_cleanup (tui_restore_gdbout, (void*) old_stdout);
-  gdbarch_print_registers_info (gdbarch, stream, frame, regnum, 1);
-
-  /* Save formatted output in the buffer.  */
-  p = tui_file_get_strbuf (stream);
+  gdbarch_print_registers_info (gdbarch, &stream, frame, regnum, 1);
 
   /* Remove the possible \n.  */
-  s = strrchr (p, '\n');
-  if (s && s[1] == 0)
-    *s = 0;
+  std::string &str = stream.string ();
+  if (!str.empty () && str.back () == '\n')
+    str.resize (str.size () - 1);
 
   /* Expand tabs into spaces, since ncurses on MS-Windows doesn't.  */
-  ret = tui_expand_tabs (p, 0);
+  ret = tui_expand_tabs (str.c_str (), 0);
 
   do_cleanups (cleanups);
 

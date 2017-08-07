@@ -1,5 +1,5 @@
 /* Inferior process information for the remote server for GDB.
-   Copyright (C) 2002-2016 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -467,4 +467,13 @@ struct cleanup *
 make_cleanup_restore_current_thread (void)
 {
   return make_cleanup (do_restore_current_thread_cleanup, current_thread);
+}
+
+/* See common/common-gdbthread.h.  */
+
+void
+switch_to_thread (ptid_t ptid)
+{
+  if (!ptid_equal (ptid, minus_one_ptid))
+    current_thread = find_thread_ptid (ptid);
 }

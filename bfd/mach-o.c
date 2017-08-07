@@ -1,5 +1,5 @@
 /* Mach-O support for BFD.
-   Copyright (C) 1999-2016 Free Software Foundation, Inc.
+   Copyright (C) 1999-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -1496,7 +1496,7 @@ bfd_mach_o_canonicalize_relocs (bfd *abfd, unsigned long filepos,
   for (i = 0; i < count; i++)
     {
       if (!(*bed->_bfd_mach_o_canonicalize_one_reloc)(abfd, &native_relocs[i],
-						      &res[i], syms))
+						      &res[i], syms, res))
         goto err;
     }
   free (native_relocs);
@@ -1898,7 +1898,7 @@ bfd_mach_o_write_symtab_content (bfd *abfd, bfd_mach_o_symtab_command *sym)
   if (bfd_seek (abfd, sym->stroff, SEEK_SET) != 0)
     goto err;
 
-  if (_bfd_stringtab_emit (abfd, strtab) != TRUE)
+  if (!_bfd_stringtab_emit (abfd, strtab))
     goto err;
 
   /* Pad string table.  */
@@ -2528,8 +2528,8 @@ bfd_mach_o_write_contents (bfd *abfd)
 	break;
       default:
 	_bfd_error_handler
-	  (_("unable to allocate data for load command 0x%lx"),
-	   (unsigned long) cmd->type);
+	  (_("unable to allocate data for load command %#x"),
+	   cmd->type);
 	break;
       }
 
@@ -2633,8 +2633,8 @@ bfd_mach_o_write_contents (bfd *abfd)
 	  break;
 	default:
 	  _bfd_error_handler
-	    (_("unable to write unknown load command 0x%lx"),
-	     (unsigned long) cmd->type);
+	    (_("unable to write unknown load command %#x"),
+	     cmd->type);
 	  return FALSE;
 	}
     }
@@ -2817,8 +2817,8 @@ bfd_mach_o_build_exec_seg_command (bfd *abfd, bfd_mach_o_segment_command *seg)
 	{
 	  _bfd_error_handler
 	    /* xgettext:c-format */
-	    (_("section address (%lx) below start of segment (%lx)"),
-	       (unsigned long) s->addr, (unsigned long) vma);
+	    (_("section address (%#Lx) below start of segment (%#Lx)"),
+	       s->addr, vma);
 	  return FALSE;
 	}
 
@@ -2958,8 +2958,8 @@ bfd_mach_o_layout_commands (bfd_mach_o_data_struct *mdata)
 	  break;
 	default:
 	  _bfd_error_handler
-	    (_("unable to layout unknown load command 0x%lx"),
-	     (unsigned long) cmd->type);
+	    (_("unable to layout unknown load command %#x"),
+	     cmd->type);
 	  ret = FALSE;
 	  break;
 	}
@@ -3494,7 +3494,7 @@ bfd_mach_o_read_section_32 (bfd *abfd, unsigned long prot)
   if (section->align > 64)
     {
       _bfd_error_handler
-	(_("bfd_mach_o_read_section_32: overlarge alignment value: 0x%x, "
+	(_("bfd_mach_o_read_section_32: overlarge alignment value: %#lx, "
 	   "using 32 instead"), section->align);
       section->align = 32;
     }
@@ -3537,7 +3537,7 @@ bfd_mach_o_read_section_64 (bfd *abfd, unsigned long prot)
   if (section->align > 64)
     {
       _bfd_error_handler
-	(_("bfd_mach_o_read_section_64: overlarge alignment value: 0x%x, "
+	(_("bfd_mach_o_read_section_64: overlarge alignment value: %#lx, "
 	   "using 32 instead"), section->align);
       section->align = 32;
     }
@@ -3588,8 +3588,8 @@ bfd_mach_o_read_symtab_symbol (bfd *abfd,
     {
       _bfd_error_handler
 	/* xgettext:c-format */
-        (_("bfd_mach_o_read_symtab_symbol: unable to read %d bytes at %lu"),
-         symwidth, (unsigned long) symoff);
+        (_("bfd_mach_o_read_symtab_symbol: unable to read %d bytes at %u"),
+         symwidth, symoff);
       return FALSE;
     }
 
@@ -3607,9 +3607,9 @@ bfd_mach_o_read_symtab_symbol (bfd *abfd,
     {
       _bfd_error_handler
 	/* xgettext:c-format */
-        (_("bfd_mach_o_read_symtab_symbol: name out of range (%lu >= %lu)"),
-         (unsigned long) stroff,
-         (unsigned long) sym->strsize);
+        (_("bfd_mach_o_read_symtab_symbol: name out of range (%lu >= %u)"),
+         stroff,
+         sym->strsize);
       return FALSE;
     }
 
@@ -4756,8 +4756,8 @@ bfd_mach_o_read_command (bfd *abfd, bfd_mach_o_load_command *command)
       break;
     default:
       command->len = 0;
-      _bfd_error_handler (_("%B: unknown load command 0x%lx"),
-			  abfd, (unsigned long) command->type);
+      _bfd_error_handler (_("%B: unknown load command %#x"),
+			  abfd, command->type);
       return FALSE;
     }
 
@@ -5052,8 +5052,8 @@ bfd_mach_o_header_p (bfd *abfd,
   if (! (header.byteorder == BFD_ENDIAN_BIG
 	 || header.byteorder == BFD_ENDIAN_LITTLE))
     {
-      _bfd_error_handler (_("unknown header byte-order value 0x%lx"),
-			  (unsigned long) header.byteorder);
+      _bfd_error_handler (_("unknown header byte-order value %#x"),
+			  header.byteorder);
       goto wrong;
     }
 
@@ -5641,9 +5641,9 @@ bfd_mach_o_core_file_failing_signal (bfd *abfd ATTRIBUTE_UNUSED)
 static bfd_mach_o_uuid_command *
 bfd_mach_o_lookup_uuid_command (bfd *abfd)
 {
-  bfd_mach_o_load_command *uuid_cmd;
+  bfd_mach_o_load_command *uuid_cmd = NULL;
   int ncmd = bfd_mach_o_lookup_command (abfd, BFD_MACH_O_LC_UUID, &uuid_cmd);
-  if (ncmd != 1)
+  if (ncmd != 1 || uuid_cmd == NULL)
     return FALSE;
   return &uuid_cmd->command.uuid;
 }

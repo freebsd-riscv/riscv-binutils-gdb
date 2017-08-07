@@ -1,6 +1,6 @@
 /* Native-dependent code for FreeBSD.
 
-   Copyright (C) 2002-2016 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -28,6 +28,7 @@
 #include <sys/types.h>
 #include <sys/procfs.h>
 #include <sys/ptrace.h>
+#include <sys/signal.h>
 #include <sys/sysctl.h>
 #ifdef HAVE_KINFO_GETVMMAP
 #include <sys/user.h>
@@ -216,6 +217,135 @@ static enum target_xfer_status (*super_xfer_partial) (struct target_ops *ops,
 						      ULONGEST len,
 						      ULONGEST *xfered_len);
 
+#ifdef PT_LWPINFO
+/* Return the size of siginfo for the current inferior.  */
+
+#ifdef __LP64__
+union sigval32 {
+  int sival_int;
+  uint32_t sival_ptr;
+};
+
+/* This structure matches the naming and layout of `siginfo_t' in
+   <sys/signal.h>.  In particular, the `si_foo' macros defined in that
+   header can be used with both types to copy fields in the `_reason'
+   union.  */
+
+struct siginfo32
+{
+  int si_signo;
+  int si_errno;
+  int si_code;
+  __pid_t si_pid;
+  __uid_t si_uid;
+  int si_status;
+  uint32_t si_addr;
+  union sigval32 si_value;
+  union
+  {
+    struct
+    {
+      int _trapno;
+    } _fault;
+    struct
+    {
+      int _timerid;
+      int _overrun;
+    } _timer;
+    struct
+    {
+      int _mqd;
+    } _mesgq;
+    struct
+    {
+      int32_t _band;
+    } _poll;
+    struct
+    {
+      int32_t __spare1__;
+      int __spare2__[7];
+    } __spare__;
+  } _reason;
+};
+#endif
+
+static size_t
+fbsd_siginfo_size ()
+{
+#ifdef __LP64__
+  struct gdbarch *gdbarch = get_frame_arch (get_current_frame ());
+
+  /* Is the inferior 32-bit?  If so, use the 32-bit siginfo size.  */
+  if (gdbarch_bfd_arch_info (gdbarch)->bits_per_word == 32)
+    return sizeof (struct siginfo32);
+#endif
+  return sizeof (siginfo_t);
+}
+
+/* Convert a native 64-bit siginfo object to a 32-bit object.  Note
+   that FreeBSD doesn't support writing to $_siginfo, so this only
+   needs to convert one way.  */
+
+static void
+fbsd_convert_siginfo (siginfo_t *si)
+{
+#ifdef __LP64__
+  struct gdbarch *gdbarch = get_frame_arch (get_current_frame ());
+
+  /* Is the inferior 32-bit?  If not, nothing to do.  */
+  if (gdbarch_bfd_arch_info (gdbarch)->bits_per_word != 32)
+    return;
+
+  struct siginfo32 si32;
+
+  si32.si_signo = si->si_signo;
+  si32.si_errno = si->si_errno;
+  si32.si_code = si->si_code;
+  si32.si_pid = si->si_pid;
+  si32.si_uid = si->si_uid;
+  si32.si_status = si->si_status;
+  si32.si_addr = (uintptr_t) si->si_addr;
+
+  /* If sival_ptr is being used instead of sival_int on a big-endian
+     platform, then sival_int will be zero since it holds the upper
+     32-bits of the pointer value.  */
+#if _BYTE_ORDER == _BIG_ENDIAN
+  if (si->si_value.sival_int == 0)
+    si32->si_value.sival_ptr = (uintptr_t) si->si_value.sival_ptr;
+  else
+    si32.si_value.sival_int = si->si_value.sival_int;
+#else
+  si32.si_value.sival_int = si->si_value.sival_int;
+#endif
+
+  /* Always copy the spare fields and then possibly overwrite them for
+     signal-specific or code-specific fields.  */
+  si32._reason.__spare__.__spare1__ = si->_reason.__spare__.__spare1__;
+  for (int i = 0; i < 7; i++)
+    si32._reason.__spare__.__spare2__[i] = si->_reason.__spare__.__spare2__[i];
+  switch (si->si_signo) {
+  case SIGILL:
+  case SIGFPE:
+  case SIGSEGV:
+  case SIGBUS:
+    si32.si_trapno = si->si_trapno;
+    break;
+  }
+  switch (si->si_code) {
+  case SI_TIMER:
+    si32.si_timerid = si->si_timerid;
+    si32.si_overrun = si->si_overrun;
+    break;
+  case SI_MESGQ:
+    si32.si_mqd = si->si_mqd;
+    break;
+  }
+
+  memcpy(si, &si32, sizeof (si32));
+#endif
+}
+#endif
+
 /* Implement the "to_xfer_partial target_ops" method.  */
 
 static enum target_xfer_status
@@ -228,6 +358,38 @@ fbsd_xfer_partial (struct target_ops *ops, enum target_object object,
 
   switch (object)
     {
+#ifdef PT_LWPINFO
+    case TARGET_OBJECT_SIGNAL_INFO:
+      {
+	struct ptrace_lwpinfo pl;
+	size_t siginfo_size;
+
+	/* FreeBSD doesn't support writing to $_siginfo.  */
+	if (writebuf != NULL)
+	  return TARGET_XFER_E_IO;
+
+	if (inferior_ptid.lwp_p ())
+	  pid = inferior_ptid.lwp ();
+
+	siginfo_size = fbsd_siginfo_size ();
+	if (offset > siginfo_size)
+	  return TARGET_XFER_E_IO;
+
+	if (ptrace (PT_LWPINFO, pid, (PTRACE_TYPE_ARG3) &pl, sizeof (pl)) == -1)
+	  return TARGET_XFER_E_IO;
+
+	if (!(pl.pl_flags & PL_FLAG_SI))
+	  return TARGET_XFER_E_IO;
+
+	fbsd_convert_siginfo (&pl.pl_siginfo);
+	if (offset + len > siginfo_size)
+	  len = siginfo_size - offset;
+
+	memcpy (readbuf, ((gdb_byte *) &pl.pl_siginfo) + offset, len);
+	*xfered_len = len;
+	return TARGET_XFER_OK;
+      }
+#endif
     case TARGET_OBJECT_AUXV:
       {
 	struct cleanup *cleanup = make_cleanup (null_cleanup, NULL);
@@ -321,7 +483,7 @@ fbsd_fetch_kinfo_proc (pid_t pid, struct kinfo_proc *kp)
   FreeBSD's first thread support was via a "reentrant" version of libc
   (libc_r) that first shipped in 2.2.7.  This library multiplexed all
   of the threads in a process onto a single kernel thread.  This
-  library is supported via the bsd-uthread target.
+  library was supported via the bsd-uthread target.
 
   FreeBSD 5.1 introduced two new threading libraries that made use of
   multiple kernel threads.  The first (libkse) scheduled M user
@@ -368,7 +530,7 @@ fbsd_thread_alive (struct target_ops *ops, ptid_t ptid)
 /* Convert PTID to a string.  Returns the string in a static
    buffer.  */
 
-static char *
+static const char *
 fbsd_pid_to_str (struct target_ops *ops, ptid_t ptid)
 {
   lwpid_t lwp;
@@ -653,38 +815,6 @@ fbsd_next_vfork_done (void)
 #endif
 #endif
 
-static int
-resume_one_thread_cb (struct thread_info *tp, void *data)
-{
-  ptid_t *ptid = (ptid_t *) data;
-  int request;
-
-  if (ptid_get_pid (tp->ptid) != ptid_get_pid (*ptid))
-    return 0;
-
-  if (ptid_get_lwp (tp->ptid) == ptid_get_lwp (*ptid))
-    request = PT_RESUME;
-  else
-    request = PT_SUSPEND;
-
-  if (ptrace (request, ptid_get_lwp (tp->ptid), NULL, 0) == -1)
-    perror_with_name (("ptrace"));
-  return 0;
-}
-
-static int
-resume_all_threads_cb (struct thread_info *tp, void *data)
-{
-  ptid_t *filter = (ptid_t *) data;
-
-  if (!ptid_match (tp->ptid, *filter))
-    return 0;
-
-  if (ptrace (PT_RESUME, ptid_get_lwp (tp->ptid), NULL, 0) == -1)
-    perror_with_name (("ptrace"));
-  return 0;
-}
-
 /* Implement the "to_resume" target_ops method.  */
 
 static void
@@ -711,13 +841,37 @@ fbsd_resume (struct target_ops *ops,
   if (ptid_lwp_p (ptid))
     {
       /* If ptid is a specific LWP, suspend all other LWPs in the process.  */
-      iterate_over_threads (resume_one_thread_cb, &ptid);
+      struct thread_info *tp;
+      int request;
+
+      ALL_NON_EXITED_THREADS (tp)
+        {
+	  if (ptid_get_pid (tp->ptid) != ptid_get_pid (ptid))
+	    continue;
+
+	  if (ptid_get_lwp (tp->ptid) == ptid_get_lwp (ptid))
+	    request = PT_RESUME;
+	  else
+	    request = PT_SUSPEND;
+
+	  if (ptrace (request, ptid_get_lwp (tp->ptid), NULL, 0) == -1)
+	    perror_with_name (("ptrace"));
+	}
     }
   else
     {
       /* If ptid is a wildcard, resume all matching threads (they won't run
 	 until the process is continued however).  */
-      iterate_over_threads (resume_all_threads_cb, &ptid);
+      struct thread_info *tp;
+
+      ALL_NON_EXITED_THREADS (tp)
+        {
+	  if (!ptid_match (tp->ptid, ptid))
+	    continue;
+
+	  if (ptrace (PT_RESUME, ptid_get_lwp (tp->ptid), NULL, 0) == -1)
+	    perror_with_name (("ptrace"));
+	}
       ptid = inferior_ptid;
     }
   super_resume (ops, ptid, step, signo);

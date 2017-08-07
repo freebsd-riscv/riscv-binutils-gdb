@@ -1,5 +1,5 @@
 /* Morpho Technologies MT specific support for 32-bit ELF
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -458,7 +458,7 @@ mt_elf_check_relocs
 
 	  /* PR15323, ref flags aren't set for references in the same
 	     object.  */
-	  h->root.non_ir_ref = 1;
+	  h->root.non_ir_ref_regular = 1;
 	}
     }
 
@@ -524,7 +524,7 @@ mt_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
   old_flags = elf_elfheader (obfd)->e_flags;
 
 #ifdef DEBUG
-  _bfd_error_handler ("%B: old_flags = 0x%.8lx, new_flags = 0x%.8lx, init = %s",
+  _bfd_error_handler ("%B: old_flags = 0x%.8x, new_flags = 0x%.8x, init = %s",
 		      ibfd, old_flags, new_flags, elf_flags_init (obfd) ? "yes" : "no");
 #endif
 

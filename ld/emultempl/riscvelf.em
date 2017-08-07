@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright 2004, 2006, 2007, 2008, 2016 Free Software Foundation, Inc.
+#   Copyright (C) 2004-2017 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -28,10 +28,6 @@ fragment <<EOF
 static void
 riscv_elf_before_allocation (void)
 {
-  bfd_boolean all_inputs_binary = TRUE;
-  bfd* abfd;
-  extern const bfd_target binary_vec;
-
   gld${EMULATION_NAME}_before_allocation ();
 
   if (link_info.discard == discard_sec_merge)
@@ -43,16 +39,7 @@ riscv_elf_before_allocation (void)
   else
     ENABLE_RELAXATION;
 
-  /* check if all of input files are binary blob.
-     If true, I skip relaxation pass. */
-  for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next) {
-    if (abfd->xvec != &binary_vec) {
-      all_inputs_binary = FALSE;
-      break;
-    }
-  }
-
-  link_info.relax_pass = all_inputs_binary == TRUE? 0: 2;
+  link_info.relax_pass = 3;
 }
 
 static void
