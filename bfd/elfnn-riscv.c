@@ -46,7 +46,7 @@
 /* The name of the dynamic interpreter.  This is put in the .interp
    section.  */
 
-#define ELF64_DYNAMIC_INTERPRETER "/lib/ld.so.1"
+#define ELF64_DYNAMIC_INTERPRETER "/libexec/ld-elf.so.1"
 #define ELF32_DYNAMIC_INTERPRETER "/lib32/ld.so.1"
 
 #define ELF_ARCH			bfd_arch_riscv
